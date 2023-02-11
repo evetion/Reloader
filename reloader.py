@@ -22,18 +22,23 @@
  ***************************************************************************/
 """
 import os.path
-
-from qgis.core import Qgis
-from qgis.PyQt.QtCore import QCoreApplication,QFileSystemWatcher,  QSettings, QTranslator
-from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from os.path import isfile
 
-# Import the code for the dialog
-# from .reloader_dialog import ReloaderDialog
+from qgis.core import Qgis
+from qgis.PyQt.QtCore import (
+    QCoreApplication,
+    QFileSystemWatcher,
+    QSettings,
+    QTranslator,
+)
+from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
 # Initialize Qt resources from file resources.py
 from .resources import *
+
+# Import the code for the dialog
+# from .reloader_dialog import ReloaderDialog
 
 
 class Reloader:
@@ -201,6 +206,7 @@ class Reloader:
         else:
             for layer in layers:
                 layer.reload()
+                layer.triggerRepaint()
 
     def reopen(self):
         """Reopen selected layer(s), which also updates the extent in contrast to `reload`."""
@@ -213,26 +219,35 @@ class Reloader:
         else:
             for layer in layers:
                 layer.setDataSource(layer.source(), layer.name(), layer.providerType())
+                layer.triggerRepaint()
 
     def watch(self):
         """Start watching selected layer(s) for changes."""
         layers = self.iface.layerTreeView().selectedLayers()
-
+        print(self.watchers)
         if len(layers) == 0:
             mw = self.iface.mainWindow()
             QMessageBox.warning(mw, "Reloader", "No selected layer(s).")
             return 1
         else:
             for layer in layers:
-                layer.reload() 
+                layer.reload()
                 path = layer.dataProvider().dataSourceUri()
                 if not isfile(path):
-                    self.iface.messageBar().pushMessage("Warning", f"Can't watch {layer.name()} for updates because it is not a local path.", level=Qgis.Warning, duration=5)
+                    self.iface.messageBar().pushMessage(
+                        "Warning",
+                        f"Can't watch {layer.name()} for updates because it is not a local path.",
+                        level=Qgis.Warning,
+                        duration=5,
+                    )
                 else:
                     watcher = QFileSystemWatcher()
                     watcher.addPath(path)
-                    watcher.fileChanged.connect(layer.reload)
-                    self.watchers[layer.id] = watcher
+                    def reload():
+                        layer.reload()
+                        layer.triggerRepaint()
+                    watcher.fileChanged.connect(reload)
+                    self.watchers[layer.id()] = watcher
 
     def unwatch(self):
         """Stop watching selected layer(s) for changes."""
@@ -244,9 +259,13 @@ class Reloader:
             return 1
         else:
             for layer in layers:
-                watcher = self.watchers.pop(layer.id, None)
+                watcher = self.watchers.pop(layer.id(), None)
                 if watcher is None:
-                    self.iface.messageBar().pushMessage("Warning", f"Can't stop watching {layer.name()} because we never started watching it.", level=Qgis.Warning, duration=5)
+                    self.iface.messageBar().pushMessage(
+                        "Warning",
+                        f"Can't stop watching {layer.name()} because we never started watching it.",
+                        level=Qgis.Warning,
+                        duration=5,
+                    )
                 else:
                     del(watcher)
-
