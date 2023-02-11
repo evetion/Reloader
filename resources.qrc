@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/plugins/reloader" >
+        <file>layer-reload.png</file>
+    </qresource>
+    <qresource prefix="/plugins/reloader" >
+        <file>layer-reopen.png</file>
+    </qresource>
+    <qresource prefix="/plugins/reloader" >
+        <file>layer-watch.png</file>
+    </qresource>
+    <qresource prefix="/plugins/reloader" >
+        <file>layer-unwatch.png</file>
+    </qresource>
+</RCC>
