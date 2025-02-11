@@ -11,6 +11,17 @@
         copyright            : (C) 2023 by Maarten Pronk
         email                : git@evetion.nl
  ***************************************************************************/
+ 
+/***************************************************************************
+ Updated 2025-020-11:
+
+ o Watching multiple files/layers is now working properly 
+ o Support added for file names that are URL-encoded (including those with 
+   options appended)
+
+ ǒ 2025 Alexander Hajnal
+ 
+ ***************************************************************************/
 
 /***************************************************************************
  *                                                                         *
@@ -39,6 +50,17 @@ from .resources import *
 
 # Import the code for the dialog
 # from .reloader_dialog import ReloaderDialog
+
+
+# Support for encoded filenames
+import re
+import urllib.parse
+
+# Used to get callbacks working reliably
+from qgis.core import QgsProject
+
+# For logging
+from qgis.core import QgsMessageLog
 
 
 class Reloader:
@@ -232,7 +254,24 @@ class Reloader:
         else:
             for layer in layers:
                 layer.reload()
+                # File being monitored
                 path = layer.dataProvider().dataSourceUri()
+                # The ID of the layer to be updated on change
+                layer_id = layer.id()
+                
+                QgsMessageLog.logMessage('Attemptimng to add "' + path + '"', 'Reloader')
+                
+                # For e.g. a delimited text layer, the raw path is URL encoded 
+                # and has options appended; this needs to be cleaned up.
+                if re.match("^file://", path):
+                    # Strip the prefix
+                    path = re.sub("^file://", "", path)
+                    # Strip the options off the end
+                    path = re.sub("\?.*$", "", path)
+                    # Decode the filename into UTF-8
+                    path = urllib.parse.unquote(path)
+                    QgsMessageLog.logMessage('Adjusted file:// URI: "' + path + '"', 'Reloader')
+                
                 if not isfile(path):
                     self.iface.messageBar().pushMessage(
                         "Warning",
@@ -240,14 +279,46 @@ class Reloader:
                         level=Qgis.Warning,
                         duration=5,
                     )
+                    
                 else:
+                    QgsMessageLog.logMessage(f"Creating callback", 'Reloader')
+                    
+                    # Callback to perform the refresh of the appropriate layer
+                    # path:     The file being watched
+                    # layer_id: The layer to be refreshed
+                    def reload(path, layer_id):
+                        # For reasons unknown the order of arguments is important; 
+                        # if layer_id is made the first argument then both values 
+                        # are set to the path!
+                        
+                        QgsMessageLog.logMessage(f"Reloading layer", 'Reloader')
+                        
+                        # Get the layer object with the passed ID
+                        # Things break if "layer" is used as the (left-side) variable name
+                        l = QgsProject.instance().mapLayer(layer_id)
+                        
+                        QgsMessageLog.logMessage( "    ID:    " + l.id(),   'Reloader')
+                        QgsMessageLog.logMessage( "    Name:  " + l.name(), 'Reloader')
+                        QgsMessageLog.logMessage( "    Path:  " + path,     'Reloader')
+                        
+                        # Update the layer
+                        l.reload()
+                        l.triggerRepaint()
+                    
+                    # Install the file watcher
                     watcher = QFileSystemWatcher()
                     watcher.addPath(path)
-                    def reload():
-                        layer.reload()
-                        layer.triggerRepaint()
-                    watcher.fileChanged.connect(reload)
-                    self.watchers[layer.id()] = watcher
+                    
+                    # If the arguments are passed implictly (or directly) then 
+                    # only the last-set values are used, hence the lambda.
+                    # 
+                    # The argument order is important; for reasons unknown both 
+                    # arguments are set to the path value if the arguments are 
+                    # transposed.
+                    watcher.fileChanged.connect(lambda path=path, layer_id=layer_id: reload(path, layer_id))
+                    
+                    # Using layer.id() directly is unreliable
+                    self.watchers[layer_id] = watcher
 
     def unwatch(self):
         """Stop watching selected layer(s) for changes."""
@@ -269,3 +340,4 @@ class Reloader:
                     )
                 else:
                     del(watcher)
+

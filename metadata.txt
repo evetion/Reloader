@@ -5,9 +5,9 @@
 [general]
 name=Reloader
 qgisMinimumVersion=3.0
-description=Reload selected layer(s).
-version=0.1
-author=Maarten Pronk
+description=Reload selected layer(s) on external changes or on demand.
+version=0.2
+author=Maarten Pronk, Alexander Hajnal
 email=git@evetion.nl
 
 about=Simple utility to reload or reopen selected layer(s), or watch these layers for local file changes. Useful when you're editing the underlying data on the fly in some other program.
