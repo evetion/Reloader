@@ -13,13 +13,13 @@
  ***************************************************************************/
  
 /***************************************************************************
- Updated 2025-020-11:
+ Updated 2025-02-11:
 
  o Watching multiple files/layers is now working properly 
  o Support added for file names that are URL-encoded (including those with 
    options appended)
 
- ǒ 2025 Alexander Hajnal
+ © 2025 Alexander Hajnal
  
  ***************************************************************************/
 
