@@ -306,6 +306,18 @@ class Reloader:
                                                   "Path:  " + path,
                                                   tag='Reloader', level=Qgis.Info, notifyUser=False)
                         
+                        # Re-add the watch if change was not in-place
+                        # See https://doc.qt.io/qt-6/qfilesystemwatcher.html#fileChanged
+                        found = False
+                        for item in self.watchers[layer.id()].files():
+                            if item == path:
+                                found = True
+                                break
+                        if not found:
+                            if isfile(path):
+                                QgsMessageLog.logMessage(f"Non-in-place file update, reinstalling watch", tag='Reloader', level=Qgis.Info, notifyUser=False)
+                                self.watchers[layer.id()].addPath(path)
+                        
                         # Update the layer
                         layer.reload()
                         layer.triggerRepaint()
