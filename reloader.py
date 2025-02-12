@@ -275,8 +275,6 @@ class Reloader:
                 layer.reload()
                 # File being monitored
                 uri = layer.dataProvider().dataSourceUri()
-                # The ID of the layer to be updated on change
-                layer_id = layer.id()
                 
                 QgsMessageLog.logMessage('Attempting to add watch for "' + uri + '"', tag='Reloader', level=Qgis.Info, notifyUser=False)
                 
@@ -296,18 +294,12 @@ class Reloader:
                     QgsMessageLog.logMessage(f"Creating callback", tag='Reloader', level=Qgis.Info, notifyUser=False)
                     
                     # Callback to perform the refresh of the appropriate layer
-                    # path:     The file being watched
-                    # layer_id: The layer to be refreshed
-                    def reload(path, layer_id):
-                        # For reasons unknown the order of arguments is important; 
-                        # if layer_id is made the first argument then both values 
-                        # are set to the path!
-                        
-                        
-                        # Get the layer object with the passed ID
-                        # Things break if "layer" is used as the (left-side) variable name
-                        l = QgsProject.instance().mapLayer(layer_id)
-                        
+                    # path:  The file being watched
+                    #        This argument is set to the path of the file whose
+                    #        change triggered the callback, irrespectove of what
+                    #        value was specified when the watcher was connected.
+                    # layer: The layer to be refreshed
+                    def reload(path, layer):
                         QgsMessageLog.logMessage( "Reloading layer\n" +
                                                   "ID:    " + layer.id() + "\n" +
                                                   "Name:  " + layer.name() + "\n" +
@@ -315,23 +307,22 @@ class Reloader:
                                                   tag='Reloader', level=Qgis.Info, notifyUser=False)
                         
                         # Update the layer
-                        l.reload()
-                        l.triggerRepaint()
+                        layer.reload()
+                        layer.triggerRepaint()
                     
-                    # Install the file watcher
+                    # Install watcher for this path
+                    
                     watcher = QFileSystemWatcher()
                     watcher.addPath(path)
                     
-                    # If the arguments are passed implictly (or directly) then 
-                    # only the last-set values are used, hence the lambda.
-                    # 
-                    # The argument order is important; for reasons unknown both 
-                    # arguments are set to the path value if the arguments are 
-                    # transposed.
-                    watcher.fileChanged.connect(lambda path=path, layer_id=layer_id: reload(path, layer_id))
+                    # Due to late binding of variable values, the values to be
+                    # passed to the callback must be explictly set, hence the
+                    # lambda.  Note that the first argument is always set by
+                    # watcher to the path of the file that triggered the
+                    # callback, irrespective of what value is set here.
+                    watcher.fileChanged.connect(lambda p='overwritten', l=layer: reload(p, l))
                     
-                    # Using layer.id() directly is unreliable
-                    self.watchers[layer_id] = watcher
+                    self.watchers[layer.id()] = watcher
 
     def unwatch(self):
         """Stop watching selected layer(s) for changes."""
