@@ -243,6 +243,25 @@ class Reloader:
                 layer.setDataSource(layer.source(), layer.name(), layer.providerType())
                 layer.triggerRepaint()
 
+    def extract_path_from_uri(self, path):
+        """Return the decoded path for file:// URIs or the unprocessed path for all others"""
+        
+        if re.match("^file://", path):
+            # path is a file:// URI
+            
+            # Strip the prefix
+            path = re.sub("^file://", "", path)
+            
+            # Strip the options off the end
+            path = re.sub("\?.*$", "", path)
+            
+            # Decode the filename into UTF-8
+            path = urllib.parse.unquote(path)
+            
+            QgsMessageLog.logMessage('Adjusted file:// URI: "' + path + '"', 'Reloader')
+        
+        return path
+
     def watch(self):
         """Start watching selected layer(s) for changes."""
         layers = self.iface.layerTreeView().selectedLayers()
@@ -255,22 +274,15 @@ class Reloader:
             for layer in layers:
                 layer.reload()
                 # File being monitored
-                path = layer.dataProvider().dataSourceUri()
+                uri = layer.dataProvider().dataSourceUri()
                 # The ID of the layer to be updated on change
                 layer_id = layer.id()
                 
-                QgsMessageLog.logMessage('Attemptimng to add "' + path + '"', 'Reloader')
+                QgsMessageLog.logMessage('Attemptimng to add "' + uri + '"', 'Reloader')
                 
                 # For e.g. a delimited text layer, the raw path is URL encoded 
                 # and has options appended; this needs to be cleaned up.
-                if re.match("^file://", path):
-                    # Strip the prefix
-                    path = re.sub("^file://", "", path)
-                    # Strip the options off the end
-                    path = re.sub("\?.*$", "", path)
-                    # Decode the filename into UTF-8
-                    path = urllib.parse.unquote(path)
-                    QgsMessageLog.logMessage('Adjusted file:// URI: "' + path + '"', 'Reloader')
+                path = self.extract_path_from_uri(uri)
                 
                 if not isfile(path):
                     self.iface.messageBar().pushMessage(
