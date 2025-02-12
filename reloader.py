@@ -258,7 +258,7 @@ class Reloader:
             # Decode the filename into UTF-8
             path = urllib.parse.unquote(path)
             
-            QgsMessageLog.logMessage('Adjusted file:// URI: "' + path + '"', 'Reloader')
+            QgsMessageLog.logMessage('Adjusted file:// URI: "' + path + '"', tag='Reloader', level=Qgis.Info, notifyUser=False)
         
         return path
 
@@ -278,7 +278,7 @@ class Reloader:
                 # The ID of the layer to be updated on change
                 layer_id = layer.id()
                 
-                QgsMessageLog.logMessage('Attemptimng to add "' + uri + '"', 'Reloader')
+                QgsMessageLog.logMessage('Attempting to add watch for "' + uri + '"', tag='Reloader', level=Qgis.Info, notifyUser=False)
                 
                 # For e.g. a delimited text layer, the raw path is URL encoded 
                 # and has options appended; this needs to be cleaned up.
@@ -293,7 +293,7 @@ class Reloader:
                     )
                     
                 else:
-                    QgsMessageLog.logMessage(f"Creating callback", 'Reloader')
+                    QgsMessageLog.logMessage(f"Creating callback", tag='Reloader', level=Qgis.Info, notifyUser=False)
                     
                     # Callback to perform the refresh of the appropriate layer
                     # path:     The file being watched
@@ -303,15 +303,16 @@ class Reloader:
                         # if layer_id is made the first argument then both values 
                         # are set to the path!
                         
-                        QgsMessageLog.logMessage(f"Reloading layer", 'Reloader')
                         
                         # Get the layer object with the passed ID
                         # Things break if "layer" is used as the (left-side) variable name
                         l = QgsProject.instance().mapLayer(layer_id)
                         
-                        QgsMessageLog.logMessage( "    ID:    " + l.id(),   'Reloader')
-                        QgsMessageLog.logMessage( "    Name:  " + l.name(), 'Reloader')
-                        QgsMessageLog.logMessage( "    Path:  " + path,     'Reloader')
+                        QgsMessageLog.logMessage( "Reloading layer\n" +
+                                                  "ID:    " + layer.id() + "\n" +
+                                                  "Name:  " + layer.name() + "\n" +
+                                                  "Path:  " + path,
+                                                  tag='Reloader', level=Qgis.Info, notifyUser=False)
                         
                         # Update the layer
                         l.reload()
