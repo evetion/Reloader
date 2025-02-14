@@ -13,11 +13,18 @@
  ***************************************************************************/
  
 /***************************************************************************
- Updated 2025-02-11:
+ Updated 2025-02-13:
 
- o Watching multiple files/layers is now working properly 
+ o Watching multiple files/layers is now working properly
+   https://github.com/evetion/Reloader/issues/2
+
  o Support added for file names that are URL-encoded (including those with 
    options appended)
+   https://github.com/evetion/Reloader/issues/2
+
+ o Files changed with non-in-place updates (write to temporary file + move)
+   are now persistently watched
+   https://github.com/evetion/Reloader/issues/4
 
  © 2025 Alexander Hajnal
  
@@ -295,11 +302,26 @@ class Reloader:
                     
                     # Callback to perform the refresh of the appropriate layer
                     # path:  The file being watched
-                    #        This argument is set to the path of the file whose
-                    #        change triggered the callback, irrespectove of what
-                    #        value was specified when the watcher was connected.
-                    # layer: The layer to be refreshed
-                    def reload(path, layer):
+                    #        This is set by the watcher to the path of the file
+                    #        whose change triggered the callback, irrespective
+                    #        of what value was specified when the callback was
+                    #        connected to the watcher.
+                    # layer: The layer to be reloaded
+                    #
+                    # Note: The "layer=layer" syntax used in the callback
+                    # definition explicitly sets the layer argument's value to
+                    # the current layer value at the time the callback is
+                    # created.  If one instead were to omit "layer=layer" then
+                    # the layer passed to the callback would be the value of the
+                    # watch(self) method's layer iterator at the time that the
+                    # callback is called, namely the final layer in the most-
+                    # recently added list of layers to watch.  In other words,
+                    # parameters to the callback function must be explicitly set
+                    # in the callback's definition (this does not apply to the
+                    # path parameter since its value is set by the watcher at
+                    # the time the callback is called).  For further discussion
+                    # of this see http://jceipek.com/Olin-Coding-Tutorials/
+                    def reload_callback(path, layer=layer):
                         QgsMessageLog.logMessage( "Reloading layer\n" +
                                                   "ID:    " + layer.id() + "\n" +
                                                   "Name:  " + layer.name() + "\n" +
@@ -323,17 +345,10 @@ class Reloader:
                                 self.watchers[layer.id()].addPath(path)
                     
                     # Install watcher for this path
-                    
+                    # Callback's arguments are set via its definition, above
                     watcher = QFileSystemWatcher()
                     watcher.addPath(path)
-                    
-                    # Due to late binding of variable values, the values to be
-                    # passed to the callback must be explictly set, hence the
-                    # lambda.  Note that the first argument is always set by
-                    # watcher to the path of the file that triggered the
-                    # callback, irrespective of what value is set here.
-                    watcher.fileChanged.connect(lambda p='overwritten', l=layer: reload(p, l))
-                    
+                    watcher.fileChanged.connect(reload_callback)
                     self.watchers[layer.id()] = watcher
 
     def unwatch(self):
