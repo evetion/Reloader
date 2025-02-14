@@ -63,9 +63,6 @@ from .resources import *
 import re
 import urllib.parse
 
-# Used to get callbacks working reliably
-from qgis.core import QgsProject
-
 # For logging
 from qgis.core import QgsMessageLog
 
