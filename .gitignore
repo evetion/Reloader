@@ -160,3 +160,8 @@ cython_debug/
 #.idea/
 
 zip_build/
+# pixi environments
+.pixi
+*.egg-info
+resources.py
+

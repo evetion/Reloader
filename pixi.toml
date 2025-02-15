@@ -1,0 +1,22 @@
+[project]
+authors = ["Maarten Pronk <git@evetion.nl>"]
+channels = ["conda-forge"]
+description = "Add a short description here"
+name = "Reloader"
+platforms = ["osx-arm64", "win-64", "linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+ruff = ">=0.9.6,<0.10"
+python = "3.12.*"
+setuptools = ">=75.8.0,<76"
+pyqt = "5.*"
+pytest = ">=8.3.4,<9"
+qgis = ">=3.40.3,<4"
+
+[pypi-dependencies]
+pb-tool = ">=3.1.0, <4"
+sphinx = "==7"
+sphinxcontrib-serializinghtml = ">=2.0.0, <3"

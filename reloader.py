@@ -11,14 +11,14 @@
         copyright            : (C) 2023 by Maarten Pronk
         email                : git@evetion.nl
  ***************************************************************************/
- 
+
 /***************************************************************************
  Updated 2025-02-13:
 
  o Watching multiple files/layers is now working properly
    https://github.com/evetion/Reloader/issues/2
 
- o Support added for file names that are URL-encoded (including those with 
+ o Support added for file names that are URL-encoded (including those with
    options appended)
    https://github.com/evetion/Reloader/issues/2
 
@@ -27,7 +27,7 @@
    https://github.com/evetion/Reloader/issues/4
 
  © 2025 Alexander Hajnal
- 
+
  ***************************************************************************/
 
 /***************************************************************************
@@ -39,6 +39,7 @@
  *                                                                         *
  ***************************************************************************/
 """
+
 import os.path
 from os.path import isfile
 
@@ -46,8 +47,6 @@ from qgis.core import Qgis
 from qgis.PyQt.QtCore import (
     QCoreApplication,
     QFileSystemWatcher,
-    QSettings,
-    QTranslator,
 )
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
@@ -56,15 +55,11 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from .resources import *
 
 # Import the code for the dialog
-# from .reloader_dialog import ReloaderDialog
-
+# from .reloader_diaslog import ReloaderDialog
 
 # Support for encoded filenames
 import re
 import urllib.parse
-
-# Used to get callbacks working reliably
-from qgis.core import QgsProject
 
 # For logging
 from qgis.core import QgsMessageLog
@@ -252,21 +247,26 @@ class Reloader:
 
     def extract_path_from_uri(self, path):
         """Return the decoded path for file:// URIs or the unprocessed path for all others"""
-        
+
         if re.match("^file://", path):
             # path is a file:// URI
-            
+
             # Strip the prefix
             path = re.sub("^file://", "", path)
-            
+
             # Strip the options off the end
-            path = re.sub("\?.*$", "", path)
-            
+            path = re.sub("\\?.*$", "", path)
+
             # Decode the filename into UTF-8
             path = urllib.parse.unquote(path)
-            
-            QgsMessageLog.logMessage('Adjusted file:// URI: "' + path + '"', tag='Reloader', level=Qgis.Info, notifyUser=False)
-        
+
+            QgsMessageLog.logMessage(
+                'Adjusted file:// URI: "' + path + '"',
+                tag="Reloader",
+                level=Qgis.Info,
+                notifyUser=False,
+            )
+
         return path
 
     def watch(self):
@@ -282,13 +282,18 @@ class Reloader:
                 layer.reload()
                 # File being monitored
                 uri = layer.dataProvider().dataSourceUri()
-                
-                QgsMessageLog.logMessage('Attempting to add watch for "' + uri + '"', tag='Reloader', level=Qgis.Info, notifyUser=False)
-                
-                # For e.g. a delimited text layer, the raw path is URL encoded 
+
+                QgsMessageLog.logMessage(
+                    'Attempting to add watch for "' + uri + '"',
+                    tag="Reloader",
+                    level=Qgis.Info,
+                    notifyUser=False,
+                )
+
+                # For e.g. a delimited text layer, the raw path is URL encoded
                 # and has options appended; this needs to be cleaned up.
                 path = self.extract_path_from_uri(uri)
-                
+
                 if not isfile(path):
                     self.iface.messageBar().pushMessage(
                         "Warning",
@@ -296,10 +301,15 @@ class Reloader:
                         level=Qgis.Warning,
                         duration=5,
                     )
-                    
+
                 else:
-                    QgsMessageLog.logMessage(f"Creating callback", tag='Reloader', level=Qgis.Info, notifyUser=False)
-                    
+                    QgsMessageLog.logMessage(
+                        f"Creating callback",
+                        tag="Reloader",
+                        level=Qgis.Info,
+                        notifyUser=False,
+                    )
+
                     # Callback to perform the refresh of the appropriate layer
                     # path:  The file being watched
                     #        This is set by the watcher to the path of the file
@@ -322,28 +332,37 @@ class Reloader:
                     # the time the callback is called).  For further discussion
                     # of this see http://jceipek.com/Olin-Coding-Tutorials/
                     def reload_callback(path, layer=layer):
-                        QgsMessageLog.logMessage( "Reloading layer\n" +
-                                                  "ID:    " + layer.id() + "\n" +
-                                                  "Name:  " + layer.name() + "\n" +
-                                                  "Path:  " + path,
-                                                  tag='Reloader', level=Qgis.Info, notifyUser=False)
-                        
+                        QgsMessageLog.logMessage(
+                            "Reloading layer\n"
+                            + "ID:    "
+                            + layer.id()
+                            + "\n"
+                            + "Name:  "
+                            + layer.name()
+                            + "\n"
+                            + "Path:  "
+                            + path,
+                            tag="Reloader",
+                            level=Qgis.Info,
+                            notifyUser=False,
+                        )
+
                         # Update the layer
                         layer.reload()
                         layer.triggerRepaint()
-                        
+
                         # Re-add the watch if change was not in-place
                         # See https://doc.qt.io/qt-6/qfilesystemwatcher.html#fileChanged
-                        found = False
-                        for item in self.watchers[layer.id()].files():
-                            if item == path:
-                                found = True
-                                break
-                        if not found:
+                        if path in self.watchers[layer.id()].files():
                             if isfile(path):
-                                QgsMessageLog.logMessage(f"Non-in-place file update, reinstalling watch", tag='Reloader', level=Qgis.Info, notifyUser=False)
+                                QgsMessageLog.logMessage(
+                                    f"Non-in-place file update, reinstalling watch",
+                                    tag="Reloader",
+                                    level=Qgis.Info,
+                                    notifyUser=False,
+                                )
                                 self.watchers[layer.id()].addPath(path)
-                    
+
                     # Install watcher for this path
                     # Callback's arguments are set via its definition, above
                     watcher = QFileSystemWatcher()
@@ -370,5 +389,4 @@ class Reloader:
                         duration=5,
                     )
                 else:
-                    del(watcher)
-
+                    del watcher
