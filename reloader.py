@@ -353,7 +353,7 @@ class Reloader:
 
                         # Re-add the watch if change was not in-place
                         # See https://doc.qt.io/qt-6/qfilesystemwatcher.html#fileChanged
-                        if path in self.watchers[layer.id()].files():
+                        if path not in self.watchers[layer.id()].files():
                             if isfile(path):
                                 QgsMessageLog.logMessage(
                                     f"Non-in-place file update, reinstalling watch",
