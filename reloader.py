@@ -61,6 +61,9 @@ from .resources import *
 import re
 import urllib.parse
 
+# Used for callback
+from qgis.core import QgsProject
+
 # For logging
 from qgis.core import QgsMessageLog
 
@@ -295,11 +298,22 @@ class Reloader:
                 path = self.extract_path_from_uri(uri)
 
                 if not isfile(path):
+                    # Path doesn't specify an extant local file
+
+                    # Notify the user
                     self.iface.messageBar().pushMessage(
                         "Warning",
                         f"Can't watch {layer.name()} for updates because it is not a local path.",
                         level=Qgis.Warning,
                         duration=5,
+                    )
+
+                    # Also log it to the Reloader log
+                    QgsMessageLog.logMessage(
+                        f"Can't watch {layer.name()} for updates because it is not a local path.",
+                        tag="Reloader",
+                        level=Qgis.Warning,
+                        notifyUser=False,
                     )
 
                 else:
@@ -311,37 +325,74 @@ class Reloader:
                     )
 
                     # Callback to perform the refresh of the appropriate layer
-                    # path:  The file being watched
-                    #        This is set by the watcher to the path of the file
-                    #        whose change triggered the callback, irrespective
-                    #        of what value was specified when the callback was
-                    #        connected to the watcher.
-                    # layer: The layer to be reloaded
+                    # This is called by watcher when a watched file changes.
                     #
-                    # Note: The "layer=layer" syntax used in the callback
-                    # definition explicitly sets the layer argument's value to
-                    # the current layer value at the time the callback is
-                    # created.  If one instead were to omit "layer=layer" then
-                    # the layer passed to the callback would be the value of the
-                    # watch(self) method's layer iterator at the time that the
-                    # callback is called, namely the final layer in the most-
-                    # recently added list of layers to watch.  In other words,
-                    # parameters to the callback function must be explicitly set
-                    # in the callback's definition (this does not apply to the
-                    # path parameter since its value is set by the watcher at
-                    # the time the callback is called).  For further discussion
-                    # of this see http://jceipek.com/Olin-Coding-Tutorials/
-                    def reload_callback(path, layer=layer):
+                    # path:     The file being watched
+                    #           This is set by the watcher to the path of the
+                    #           file whose change triggered the callback,
+                    #           irrespective of what value was specified when
+                    #           the callback was connected to the watcher.
+                    # layer_id: The ID of the layer to be reloaded
+                    #
+                    # Note: The "layer_id=layer.id()" syntax used in the call-
+                    # back definition explicitly sets the layer_id argument's
+                    # value to the current layer's ID at the time the callback
+                    # is created.  If one were to omit "layer_id=layer.id()" 
+                    # and instead set layer_id in the watch() function's loop 
+                    # then the layer_id passed to the callback would be the 
+                    # layer_id value of the final iteration of the loop.  In 
+                    # other words, parameters to the callback function must be 
+                    # explicitly set in the callback's definition (this does 
+                    # not apply to the path parameter since its value is set by 
+                    # the watcher at the time the callback is called).  For 
+                    # further discussion of this see:
+                    # http://jceipek.com/Olin-Coding-Tutorials/
+                    def reload_callback(path, layer_id=layer.id()):
+
+                        # Get the layer object for the relevant layer's ID
+                        # Returns None if no layer with the given ID exists
+                        layer = QgsProject.instance().mapLayer(layer_id)
+
+                        if layer is None:
+                            # Layer for given ID does not exist
+                            
+                            # Layer was being watched but the layer was deleted
+                            # and subsequently the layer's watched file changed
+                            
+                            QgsMessageLog.logMessage(
+                                "Reloading layer\n" +
+                                "The layer for the watched file was deleted, removing its watcher\n" +
+                                f"Layer ID: {layer_id}\n" +
+                                f"Path:     {path}",
+                                tag="Reloader",
+                                level=Qgis.Info,
+                                notifyUser=False,
+                            )
+                            
+                            # Get the watcher for this [removed] layer
+                            watcher = self.watchers.pop(layer_id, None)
+                            # Sanity check
+                            if watcher is None:
+                                # Shouldn't happen
+                                QgsMessageLog.logMessage(
+                                    "Can't stop watching the removed layer because we never started watching it!",
+                                    tag="Reloader",
+                                    level=Qgis.Warning,
+                                    notifyUser=False,
+                                )
+                            else:
+                                # Delete the removed layer's watcher
+                                del watcher
+                            # No further actions
+                            return;
+
+                        # Layer still exists
+
                         QgsMessageLog.logMessage(
                             "Reloading layer\n"
-                            + "ID:    "
-                            + layer.id()
-                            + "\n"
-                            + "Name:  "
-                            + layer.name()
-                            + "\n"
-                            + "Path:  "
-                            + path,
+                            + f"ID:    {layer.id()}\n"
+                            + f"Name:  {layer.name()}\n"
+                            + f"Path:  {path}",
                             tag="Reloader",
                             level=Qgis.Info,
                             notifyUser=False,
@@ -356,7 +407,7 @@ class Reloader:
                         if path not in self.watchers[layer.id()].files():
                             if isfile(path):
                                 QgsMessageLog.logMessage(
-                                    f"Non-in-place file update, reinstalling watch",
+                                    "Non-in-place file update, reinstalling watch",
                                     tag="Reloader",
                                     level=Qgis.Info,
                                     notifyUser=False,
