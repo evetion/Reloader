@@ -57,14 +57,13 @@ from .resources import *
 # Import the code for the dialog
 # from .reloader_diaslog import ReloaderDialog
 
-# Support for encoded filenames
-import re
-import urllib.parse
+# Used for extracting and decoding layers' data file names
+from qgis.core import QgsProviderRegistry
 
 # Used for callback
 from qgis.core import QgsProject
 
-# For logging
+# Used for logging
 from qgis.core import QgsMessageLog
 
 
@@ -248,30 +247,6 @@ class Reloader:
                 layer.setDataSource(layer.source(), layer.name(), layer.providerType())
                 layer.triggerRepaint()
 
-    def extract_path_from_uri(self, path):
-        """Return the decoded path for file:// URIs or the unprocessed path for all others"""
-
-        if re.match("^file://", path):
-            # path is a file:// URI
-
-            # Strip the prefix
-            path = re.sub("^file://", "", path)
-
-            # Strip the options off the end
-            path = re.sub("\\?.*$", "", path)
-
-            # Decode the filename into UTF-8
-            path = urllib.parse.unquote(path)
-
-            QgsMessageLog.logMessage(
-                'Adjusted file:// URI: "' + path + '"',
-                tag="Reloader",
-                level=Qgis.Info,
-                notifyUser=False,
-            )
-
-        return path
-
     def watch(self):
         """Start watching selected layer(s) for changes."""
         layers = self.iface.layerTreeView().selectedLayers()
@@ -283,20 +258,85 @@ class Reloader:
         else:
             for layer in layers:
                 layer.reload()
-                # File being monitored
-                uri = layer.dataProvider().dataSourceUri()
 
                 QgsMessageLog.logMessage(
-                    'Attempting to add watch for "' + uri + '"',
+                    f'Attempting to add watch for "{layer.name()}"',
                     tag="Reloader",
                     level=Qgis.Info,
                     notifyUser=False,
                 )
 
-                # For e.g. a delimited text layer, the raw path is URL encoded
-                # and has options appended; this needs to be cleaned up.
-                path = self.extract_path_from_uri(uri)
+                # Get layer's provider type (the provider is the I/O handler)
+                provider_type = layer.providerType()
+                QgsMessageLog.logMessage( f"TBR: layer.providerType(): {provider_type}", tag="Reloader", level=Qgis.Info, notifyUser=False )
 
+                # Get layer's provider (the provider is the I/O handler)
+                provider = layer.dataProvider()
+                QgsMessageLog.logMessage( f"TBR: layer.dataProvider(): {provider}  [note: this normally displays as an empty string]", tag="Reloader", level=Qgis.Info, notifyUser=False )
+
+                if provider is None:
+                    # No provider (not sure when this could occur)
+
+                    # Notify the user
+                    self.iface.messageBar().pushMessage(
+                        "Warning",
+                        f"Can't watch {layer.name()} for updates because it has no provider.",
+                        level=Qgis.Warning,
+                        duration=5,
+                    )
+
+                    # Also log it to the Reloader log
+                    QgsMessageLog.logMessage(
+                        f"Can't watch {layer.name()} for updates because it has no provider.",
+                        tag="Reloader",
+                        level=Qgis.Warning,
+                        notifyUser=False,
+                    )
+                    return
+
+                # Get the URI containing the layer's data
+                uri=provider.dataSourceUri()
+                QgsMessageLog.logMessage( f"TBR: provider.dataSourceUri(): {uri}", tag="Reloader", level=Qgis.Info, notifyUser=False )
+
+                # Split the URI into its component parts (e.g. "path", "layerName", "url")
+                components=QgsProviderRegistry.instance().decodeUri(providerKey=provider_type, uri=uri)
+                QgsMessageLog.logMessage( f"TBR: QgsProviderRegistry.instance().decodeUri(…): {components}", tag="Reloader", level=Qgis.Info, notifyUser=False )
+
+                # Get the data file's path
+                # Not all layers will have this (e.g. ArcGIS REST layers don't; they have a "uri" component instead)
+                if not 'path' in components:
+                    # Layer's data source does not appear to be a local file
+
+                    # Notify the user
+                    self.iface.messageBar().pushMessage(
+                        "Warning",
+                        f"Can't watch {layer.name()} for updates because it is not a local file.",
+                        level=Qgis.Warning,
+                        duration=5,
+                    )
+
+                    # Also log it to the Reloader log
+                    QgsMessageLog.logMessage(
+                        f"Can't watch {layer.name()} for updates because it is not a local file.",
+                        tag="Reloader",
+                        level=Qgis.Warning,
+                        notifyUser=False,
+                    )
+                    return
+
+                # A "path" value is present, get its value
+                # (This is the name of the local data file containing the layer's data)
+                path = components['path']
+                QgsMessageLog.logMessage( f"TBR: components['path']: {path}", tag="Reloader", level=Qgis.Info, notifyUser=False )
+
+                QgsMessageLog.logMessage(
+                    f'Path: {path}',
+                    tag="Reloader",
+                    level=Qgis.Info,
+                    notifyUser=False,
+                )
+
+                # Verify that the file containing the layer's data actually exists
                 if not isfile(path):
                     # Path doesn't specify an extant local file
 
@@ -317,6 +357,8 @@ class Reloader:
                     )
 
                 else:
+                    # The file containing the layer's data exists
+
                     QgsMessageLog.logMessage(
                         f"Creating callback",
                         tag="Reloader",
@@ -430,14 +472,32 @@ class Reloader:
             QMessageBox.warning(mw, "Reloader", "No selected layer(s).")
             return 1
         else:
+            # Iterate through selected layers
             for layer in layers:
+                # Get watcher for the current layer (or None if none is present)
                 watcher = self.watchers.pop(layer.id(), None)
                 if watcher is None:
+                    # No watcher for layer
                     self.iface.messageBar().pushMessage(
                         "Warning",
                         f"Can't stop watching {layer.name()} because we never started watching it.",
                         level=Qgis.Warning,
                         duration=5,
                     )
+                    QgsMessageLog.logMessage(
+                        f"Can't stop watching {layer.name()} because we never started watching it.",
+                        tag="Reloader",
+                        level=Qgis.Warning,
+                        notifyUser=False,
+                    )
                 else:
+                    # Layer has a watcher
+                    QgsMessageLog.logMessage(
+                        f"No longer watching {layer.name()}\n" +
+                        f"Path: {watcher.files()[0]}",
+                        tag="Reloader",
+                        level=Qgis.Info,
+                        notifyUser=False,
+                    )
+                    # Remove the layer's watcher
                     del watcher
