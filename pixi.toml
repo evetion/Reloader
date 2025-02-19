@@ -4,7 +4,7 @@ channels = ["conda-forge"]
 description = "Add a short description here"
 name = "Reloader"
 platforms = ["osx-arm64", "win-64", "linux-64"]
-version = "0.1.0"
+version = "0.2"
 
 [tasks]
 
