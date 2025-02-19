@@ -26,6 +26,17 @@
    are now persistently watched
    https://github.com/evetion/Reloader/issues/4
 
+ Updated 2025-02-19:
+
+ o Support added for all file path encoding used by QGIS on all platforms
+   https://github.com/evetion/Reloader/issues/7
+   https://github.com/evetion/Reloader/issues/8
+
+ o Added warn_and_log(...) method to both notify user and log a message
+
+ o All valid selected layers will be watched even if selection includes
+   unwatchable ones
+
  © 2025 Alexander Hajnal
 
  ***************************************************************************/
@@ -215,6 +226,21 @@ class Reloader:
             parent=self.iface.mainWindow(),
         )
 
+    # Both notify the user and log a message
+    def warn_and_log(self, message):
+        self.iface.messageBar().pushMessage(
+            "Warning",
+            message,
+            level=Qgis.Warning,
+            duration=5,
+        )
+        QgsMessageLog.logMessage(
+            message,
+            tag="Reloader",
+            level=Qgis.Warning,
+            notifyUser=False,
+        )
+
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
@@ -268,66 +294,39 @@ class Reloader:
 
                 # Get layer's provider type (the provider is the I/O handler)
                 provider_type = layer.providerType()
-                QgsMessageLog.logMessage( f"TBR: layer.providerType(): {provider_type}", tag="Reloader", level=Qgis.Info, notifyUser=False )
 
                 # Get layer's provider (the provider is the I/O handler)
                 provider = layer.dataProvider()
-                QgsMessageLog.logMessage( f"TBR: layer.dataProvider(): {provider}  [note: this normally displays as an empty string]", tag="Reloader", level=Qgis.Info, notifyUser=False )
 
                 if provider is None:
                     # No provider (not sure when this could occur)
 
-                    # Notify the user
-                    self.iface.messageBar().pushMessage(
-                        "Warning",
-                        f"Can't watch {layer.name()} for updates because it has no provider.",
-                        level=Qgis.Warning,
-                        duration=5,
-                    )
+                    # Notify the user and log the error
+                    self.warn_and_log( f"Can't watch {layer.name()} for updates because it has no provider." )
 
-                    # Also log it to the Reloader log
-                    QgsMessageLog.logMessage(
-                        f"Can't watch {layer.name()} for updates because it has no provider.",
-                        tag="Reloader",
-                        level=Qgis.Warning,
-                        notifyUser=False,
-                    )
-                    return
+                    # Don't attempt to watch the layer (but keep trying to add any other selected layers)
+                    continue
 
                 # Get the URI containing the layer's data
                 uri=provider.dataSourceUri()
-                QgsMessageLog.logMessage( f"TBR: provider.dataSourceUri(): {uri}", tag="Reloader", level=Qgis.Info, notifyUser=False )
 
                 # Split the URI into its component parts (e.g. "path", "layerName", "url")
                 components=QgsProviderRegistry.instance().decodeUri(providerKey=provider_type, uri=uri)
-                QgsMessageLog.logMessage( f"TBR: QgsProviderRegistry.instance().decodeUri(…): {components}", tag="Reloader", level=Qgis.Info, notifyUser=False )
 
                 # Get the data file's path
                 # Not all layers will have this (e.g. ArcGIS REST layers don't; they have a "uri" component instead)
                 if not 'path' in components:
                     # Layer's data source does not appear to be a local file
 
-                    # Notify the user
-                    self.iface.messageBar().pushMessage(
-                        "Warning",
-                        f"Can't watch {layer.name()} for updates because it is not a local file.",
-                        level=Qgis.Warning,
-                        duration=5,
-                    )
+                    # Notify the user and log the error
+                    self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local file." )
 
-                    # Also log it to the Reloader log
-                    QgsMessageLog.logMessage(
-                        f"Can't watch {layer.name()} for updates because it is not a local file.",
-                        tag="Reloader",
-                        level=Qgis.Warning,
-                        notifyUser=False,
-                    )
-                    return
+                    # Don't attempt to watch the layer (but keep trying to add any other selected layers)
+                    continue
 
                 # A "path" value is present, get its value
                 # (This is the name of the local data file containing the layer's data)
                 path = components['path']
-                QgsMessageLog.logMessage( f"TBR: components['path']: {path}", tag="Reloader", level=Qgis.Info, notifyUser=False )
 
                 QgsMessageLog.logMessage(
                     f'Path: {path}',
@@ -340,21 +339,8 @@ class Reloader:
                 if not isfile(path):
                     # Path doesn't specify an extant local file
 
-                    # Notify the user
-                    self.iface.messageBar().pushMessage(
-                        "Warning",
-                        f"Can't watch {layer.name()} for updates because it is not a local path.",
-                        level=Qgis.Warning,
-                        duration=5,
-                    )
-
-                    # Also log it to the Reloader log
-                    QgsMessageLog.logMessage(
-                        f"Can't watch {layer.name()} for updates because it is not a local path.",
-                        tag="Reloader",
-                        level=Qgis.Warning,
-                        notifyUser=False,
-                    )
+                    # Notify the user and log the error
+                    self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local path." )
 
                 else:
                     # The file containing the layer's data exists
@@ -478,20 +464,13 @@ class Reloader:
                 watcher = self.watchers.pop(layer.id(), None)
                 if watcher is None:
                     # No watcher for layer
-                    self.iface.messageBar().pushMessage(
-                        "Warning",
-                        f"Can't stop watching {layer.name()} because we never started watching it.",
-                        level=Qgis.Warning,
-                        duration=5,
-                    )
-                    QgsMessageLog.logMessage(
-                        f"Can't stop watching {layer.name()} because we never started watching it.",
-                        tag="Reloader",
-                        level=Qgis.Warning,
-                        notifyUser=False,
-                    )
+
+                    # Notify the user and log the error
+                    self.warn_and_log( f"Can't stop watching {layer.name()} because we never started watching it." )
+
                 else:
                     # Layer has a watcher
+
                     QgsMessageLog.logMessage(
                         f"No longer watching {layer.name()}\n" +
                         f"Path: {watcher.files()[0]}",
@@ -499,5 +478,6 @@ class Reloader:
                         level=Qgis.Info,
                         notifyUser=False,
                     )
+
                     # Remove the layer's watcher
                     del watcher
