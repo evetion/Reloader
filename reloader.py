@@ -285,7 +285,9 @@ class Reloader:
         else:
             for layer in layers:
                 layer.reload()
+                self.watch_layer(layer)
 
+    def watch_layer(self, layer):
                 QgsMessageLog.logMessage(
                     f'Attempting to add watch for "{layer.name()}"',
                     tag="Reloader",
@@ -461,6 +463,9 @@ class Reloader:
         else:
             # Iterate through selected layers
             for layer in layers:
+                self.unwatch_layer(layer)
+
+    def unwatch_layer(self, layer):
                 # Get watcher for the current layer (or None if none is present)
                 watcher = self.watchers.pop(layer.id(), None)
                 if watcher is None:
