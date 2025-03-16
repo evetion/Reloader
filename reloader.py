@@ -10,10 +10,15 @@
         git sha              : $Format:%H$
         copyright            : (C) 2023 by Maarten Pronk
         email                : git@evetion.nl
-        version              : 0.2
+        version              : 0.3
  ***************************************************************************/
 
 /***************************************************************************
+ Updated 2025-03-16:
+
+ o Which files are being watched is now saved to the project file and restored
+   when the projected is loaded.
+
  Updated 2025-02-13:
 
  o Watching multiple files/layers is now working properly
@@ -77,6 +82,9 @@ from qgis.core import QgsProject
 
 # Used for logging
 from qgis.core import QgsMessageLog
+
+# Used for accessing layers from layer tree items
+from qgis.core import QgsLayerTree
 
 
 class Reloader:
@@ -227,6 +235,81 @@ class Reloader:
             parent=self.iface.mainWindow(),
         )
 
+        try:
+            # Connect to the project load event
+            self.iface.projectRead.connect(self.reconnectWatches)
+
+            # Load initial colors if the project is already loaded
+            if self.iface.activeLayer():
+                self.reconnectWatches()
+
+        except Exception as e:
+            warn_and_log(f"Error during plugin initialization: {str(e)}")
+
+    def reconnectWatches(self):
+        """Install watches for all layers having the reloader/watchLayer property set."""
+        global watchesFound, watchesInstalled
+        watchesFound = 0
+        watchesInstalled = 0
+        try:
+            def reconnect_node_watches(node):
+                global watchesFound, watchesInstalled
+                if QgsLayerTree.isLayer(node):
+                    layer = node.layer()
+                    if hasattr(node, "customProperty"):
+                        watchActive = layer.customProperty("reloader/watchLayer")
+                        if watchActive:
+                            watchesFound += 1
+                            if QgsLayerTree.isLayer(node):
+                                QgsMessageLog.logMessage(
+                                    f"Adding file change watch to '{node.layerId()}' ('{node.name()}')",
+                                    tag="Reloader",
+                                    level=Qgis.Info,
+                                    notifyUser=False,
+                                )
+                                if self.watch_layer(layer):
+                                    watchesInstalled += 1
+
+                for child in node.children():
+                    reconnect_node_watches(child)
+
+            # Print custom layer/group colors to the message log
+            root = self.iface.layerTreeView().layerTreeModel().rootGroup()
+            reconnect_node_watches(root)
+
+            if watchesFound == 0:
+                QgsMessageLog.logMessage(
+                    "No watches were found for any of the project's layers.",
+                    tag="Reloader",
+                    level=Qgis.Info,
+                    notifyUser=False,
+                )
+            else:
+                if watchesInstalled != watchesFound:
+                    QgsMessageLog.logMessage(
+                        f"File change watches were successfully restored for some (but not all) of the project's layers that are marked as being watched. ({watchesInstalled} of {watchesFound} installed)",
+                        tag="Reloader",
+                        level=Qgis.Info,
+                        notifyUser=False,
+                    )
+                else:
+                    if watchesInstalled > 1:
+                        QgsMessageLog.logMessage(
+                            f"All {watchesInstalled} file change watches were successfully restored.",
+                            tag="Reloader",
+                            level=Qgis.Info,
+                            notifyUser=False,
+                        )
+                    else:
+                        QgsMessageLog.logMessage(
+                            "The single file change watch was successfully restored.",
+                            tag="Reloader",
+                            level=Qgis.Info,
+                            notifyUser=False,
+                        )
+        except Exception as e:
+            warn_and_log(f"Error restoring file watches: {str(e)}")
+
     # Both notify the user and log a message
     def warn_and_log(self, message):
         self.iface.messageBar().pushMessage(
@@ -247,6 +330,9 @@ class Reloader:
         for action in self.actions:
             self.iface.removePluginMenu(self.tr("&Reloader"), action)
             self.iface.removeToolBarIcon(action)
+
+        # Stop listening for project-loaded signal
+        self.iface.projectRead.disconnect(self.reconnectWatches)
 
     def reload(self):
         """Reload selected layer(s)."""
@@ -288,6 +374,7 @@ class Reloader:
                 self.watch_layer(layer)
 
     def watch_layer(self, layer):
+        """Attempt to add a file change to specified layer.  Returns True on success, False on failure."""
         QgsMessageLog.logMessage(
             f'Attempting to add watch for "{layer.name()}"',
             tag="Reloader",
@@ -308,7 +395,7 @@ class Reloader:
             self.warn_and_log( f"Can't watch {layer.name()} for updates because it has no provider." )
 
             # Don't attempt to watch the layer (but keep trying to add any other selected layers)
-            continue
+            return False
 
         # Get the URI containing the layer's data
         uri=provider.dataSourceUri()
@@ -325,7 +412,7 @@ class Reloader:
             self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local file." )
 
             # Don't attempt to watch the layer (but keep trying to add any other selected layers)
-            continue
+            return False
 
         # A "path" value is present, get its value
         # (This is the name of the local data file containing the layer's data)
@@ -344,6 +431,8 @@ class Reloader:
 
             # Notify the user and log the error
             self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local path." )
+
+            return False
 
         else:
             # The file containing the layer's data exists
@@ -452,6 +541,11 @@ class Reloader:
             watcher.fileChanged.connect(reload_callback)
             self.watchers[layer.id()] = watcher
 
+            # Persist the watch (will be saved to the project file)
+            layer.setCustomProperty("reloader/watchLayer", True)
+
+            return True
+
     def unwatch(self):
         """Stop watching selected layer(s) for changes."""
         layers = self.iface.layerTreeView().selectedLayers()
@@ -466,6 +560,9 @@ class Reloader:
                 self.unwatch_layer(layer)
 
     def unwatch_layer(self, layer):
+        # No longer persist the watch
+        layer.removeCustomProperty("reloader/watchLayer")
+
         # Get watcher for the current layer (or None if none is present)
         watcher = self.watchers.pop(layer.id(), None)
         if watcher is None:
