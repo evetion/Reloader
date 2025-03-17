@@ -10,11 +10,15 @@
         git sha              : $Format:%H$
         copyright            : (C) 2023 by Maarten Pronk
         email                : git@evetion.nl
-        version              : 0.2
+        version              : 0.3
  ***************************************************************************/
 
 /***************************************************************************
- Updated 2025-02-13:
+ Updated 2025-03-16:
+
+ o Update watch if data source definition is changed.
+
+  Updated 2025-02-13:
 
  o Watching multiple files/layers is now working properly
    https://github.com/evetion/Reloader/issues/2
@@ -461,6 +465,18 @@ class Reloader:
             watcher.addPath(path)
             watcher.fileChanged.connect(reload_callback)
             self.watchers[layer.id()] = watcher
+
+            def data_source_changed_callback():
+                QgsMessageLog.logMessage(
+                    f'Data source changed for "{layer.name()}"',
+                    tag="Reloader",
+                    level=Qgis.Info,
+                    notifyUser=False,
+                )
+                self.unwatch_layer(layer)
+                self.watch_layer(layer)
+
+            layer.dataSourceChanged.connect(data_source_changed_callback)
 
             return True
 
