@@ -571,7 +571,7 @@ class Reloader:
             watcher.fileChanged.connect(reload_callback)
             self.watchers[layer.id()] = watcher
 
-			# Install data source definition changed callback 
+            # Install data source definition changed callback 
             def data_source_changed_callback():
                 QgsMessageLog.logMessage(
                     f'Data source changed for "{layer.name()}"',
@@ -614,9 +614,11 @@ class Reloader:
         else:
             # Layer has a watcher
 
+            unwatchedPath = watcher.files()[0]
+
             QgsMessageLog.logMessage(
                 f"No longer watching {layer.name()}\n" +
-                f"Path: {watcher.files()[0]}",
+                f"Path: {unwatchedPath}",
                 tag="Reloader",
                 level=Qgis.Info,
                 notifyUser=False,
@@ -624,6 +626,28 @@ class Reloader:
 
             # Remove the layer's watcher
             del watcher
+
+            # Remove all other watches of the same file
+            def remove_watch_custom_properties(node):
+                if QgsLayerTree.isLayer(node):
+                    layer = node.layer()
+                    watcher = self.watchers.pop(layer.id(), None)
+                    if watcher is not None:
+                        thisWatchedPath = watcher.files()[0]
+                        if thisWatchedPath == unwatchedPath:
+                            QgsMessageLog.logMessage(
+                                f"Removed watch of same file from {layer.name()}",
+                                tag="Reloader",
+                                level=Qgis.Info,
+                                notifyUser=False,
+                            )
+                            layer.removeCustomProperty("reloader/watchLayer")
+
+                for child in node.children():
+                    remove_watch_custom_properties(child)
+
+            root = self.iface.layerTreeView().layerTreeModel().rootGroup()
+            remove_watch_custom_properties(root)
 
             # Note that layer is no longer being watched
             layer.removeCustomProperty("reloader/watchLayer")
