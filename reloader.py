@@ -10,10 +10,14 @@
         git sha              : $Format:%H$
         copyright            : (C) 2023 by Maarten Pronk
         email                : git@evetion.nl
-        version              : 0.2
+        version              : 0.3
  ***************************************************************************/
 
 /***************************************************************************
+ Updated 2025-03-16:
+
+ o Show status icons in layers tree for each watched layer.
+
  Updated 2025-02-13:
 
  o Watching multiple files/layers is now working properly
@@ -78,6 +82,11 @@ from qgis.core import QgsProject
 # Used for logging
 from qgis.core import QgsMessageLog
 
+# Used for accessing layers from layer tree items
+from qgis.core import QgsLayerTree
+
+# Used for layer status icons
+from qgis.gui import QgsLayerTreeViewIndicator
 
 class Reloader:
     """QGIS Plugin Implementation."""
@@ -103,6 +112,10 @@ class Reloader:
         # Must be set in initGui() to survive plugin reloads
         self.first_start = None
         self.watchers = {}
+
+        # Layer status indicator (common for all watched layers)
+        self.indicator = None
+
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -226,6 +239,14 @@ class Reloader:
             callback=self.unwatch,
             parent=self.iface.mainWindow(),
         )
+
+        # Create status indicator for watched layers
+        # All such layers share a single indicator object
+        self.indicator = QgsLayerTreeViewIndicator()
+        cur_path = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(cur_path, "layer-watched-large.png")
+        icon = QIcon(icon_path)
+        self.indicator.setIcon(icon)
 
     # Both notify the user and log a message
     def warn_and_log(self, message):
@@ -450,6 +471,12 @@ class Reloader:
                     watcher.fileChanged.connect(reload_callback)
                     self.watchers[layer.id()] = watcher
 
+                    # Note that layer is being watched
+                    layer.setCustomProperty("reloader/watchLayer", True)
+
+                    self.updateStatusIcons()
+
+
     def unwatch(self):
         """Stop watching selected layer(s) for changes."""
         layers = self.iface.layerTreeView().selectedLayers()
@@ -482,3 +509,25 @@ class Reloader:
 
                     # Remove the layer's watcher
                     del watcher
+
+                    # Note that layer is no longer being watched
+                    layer.removeCustomProperty("reloader/watchLayer")
+
+                    self.updateStatusIcons()
+
+    def updateStatusIcons(self):
+        def update_node_status_icons(node):
+            if QgsLayerTree.isLayer(node):
+                layer = node.layer()
+                if hasattr(node, "customProperty"):
+                    watchActive = layer.customProperty("reloader/watchLayer")
+                    if watchActive == True:
+                        self.iface.layerTreeView().addIndicator(node, self.indicator)
+                    else:
+                        self.iface.layerTreeView().removeIndicator(node, self.indicator)
+
+            for child in node.children():
+                update_node_status_icons(child)
+
+        root = self.iface.layerTreeView().layerTreeModel().rootGroup()
+        update_node_status_icons(root)
