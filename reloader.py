@@ -21,6 +21,8 @@
 
  o Show status icons in layers tree for each watched layer.
 
+ o Update watch if data source definition is changed.
+
  Updated 2025-02-13:
 
  o Watching multiple files/layers is now working properly
@@ -390,7 +392,7 @@ class Reloader:
                 self.watch_layer(layer)
 
     def watch_layer(self, layer):
-        """Attempt to add a file change to specified layer.  Returns True on success, False on failure."""
+        """Attempt to add a file change watcher to specified layer.  Returns True on success, False on failure."""
         QgsMessageLog.logMessage(
             f'Attempting to add watch for "{layer.name()}"',
             tag="Reloader",
@@ -550,6 +552,18 @@ class Reloader:
                         )
                         self.watchers[layer.id()].addPath(path)
 
+            # Persist the watch (will be saved to the project file)
+            layer.setCustomProperty("reloader/watchLayer", True)
+
+            self.updateStatusIcons()
+
+            QgsMessageLog.logMessage(
+                f'Installing callbacks for "{layer.name()}"',
+                tag="Reloader",
+                level=Qgis.Info,
+                notifyUser=False,
+            )
+
             # Install watcher for this path
             # Callback's arguments are set via its definition, above
             watcher = QFileSystemWatcher()
@@ -557,16 +571,20 @@ class Reloader:
             watcher.fileChanged.connect(reload_callback)
             self.watchers[layer.id()] = watcher
 
-            # Persist the watch (will be saved to the project file)
-            layer.setCustomProperty("reloader/watchLayer", True)
+			# Install data source definition changed callback 
+            def data_source_changed_callback():
+                QgsMessageLog.logMessage(
+                    f'Data source changed for "{layer.name()}"',
+                    tag="Reloader",
+                    level=Qgis.Info,
+                    notifyUser=False,
+                )
+                self.unwatch_layer(layer)
+                self.watch_layer(layer)
+
+            layer.dataSourceChanged.connect(data_source_changed_callback)
 
             return True
-
-                    # Note that layer is being watched
-                    layer.setCustomProperty("reloader/watchLayer", True)
-
-                    self.updateStatusIcons()
-
 
     def unwatch(self):
         """Stop watching selected layer(s) for changes."""
