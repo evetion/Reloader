@@ -10,10 +10,15 @@
         git sha              : $Format:%H$
         copyright            : (C) 2023 by Maarten Pronk
         email                : git@evetion.nl
-        version              : 0.2
+        version              : 0.3
  ***************************************************************************/
 
 /***************************************************************************
+ Updated 2025-03-16:
+
+ o Which files are being watched is now saved to the project file and restored
+   when the projected is loaded.
+
  Updated 2025-02-13:
 
  o Watching multiple files/layers is now working properly
@@ -77,6 +82,9 @@ from qgis.core import QgsProject
 
 # Used for logging
 from qgis.core import QgsMessageLog
+
+# Used for accessing layers from layer tree items
+from qgis.core import QgsLayerTree
 
 
 class Reloader:
@@ -227,6 +235,81 @@ class Reloader:
             parent=self.iface.mainWindow(),
         )
 
+        try:
+            # Connect to the project load event
+            self.iface.projectRead.connect(self.reconnectWatches)
+
+            # Load initial colors if the project is already loaded
+            if self.iface.activeLayer():
+                self.reconnectWatches()
+
+        except Exception as e:
+            warn_and_log(f"Error during plugin initialization: {str(e)}")
+
+    def reconnectWatches(self):
+        """Install watches for all layers having the reloader/watchLayer property set."""
+        global watchesFound, watchesInstalled
+        watchesFound = 0
+        watchesInstalled = 0
+        try:
+            def reconnect_node_watches(node):
+                global watchesFound, watchesInstalled
+                if QgsLayerTree.isLayer(node):
+                    layer = node.layer()
+                    if hasattr(node, "customProperty"):
+                        watchActive = layer.customProperty("reloader/watchLayer")
+                        if watchActive:
+                            watchesFound += 1
+                            if QgsLayerTree.isLayer(node):
+                                QgsMessageLog.logMessage(
+                                    f"Adding file change watch to '{node.layerId()}' ('{node.name()}')",
+                                    tag="Reloader",
+                                    level=Qgis.Info,
+                                    notifyUser=False,
+                                )
+                                if self.watch_layer(layer):
+                                    watchesInstalled += 1
+
+                for child in node.children():
+                    reconnect_node_watches(child)
+
+            # Print custom layer/group colors to the message log
+            root = self.iface.layerTreeView().layerTreeModel().rootGroup()
+            reconnect_node_watches(root)
+
+            if watchesFound == 0:
+                QgsMessageLog.logMessage(
+                    "No watches were found for any of the project's layers.",
+                    tag="Reloader",
+                    level=Qgis.Info,
+                    notifyUser=False,
+                )
+            else:
+                if watchesInstalled != watchesFound:
+                    QgsMessageLog.logMessage(
+                        f"File change watches were successfully restored for some (but not all) of the project's layers that are marked as being watched. ({watchesInstalled} of {watchesFound} installed)",
+                        tag="Reloader",
+                        level=Qgis.Info,
+                        notifyUser=False,
+                    )
+                else:
+                    if watchesInstalled > 1:
+                        QgsMessageLog.logMessage(
+                            f"All {watchesInstalled} file change watches were successfully restored.",
+                            tag="Reloader",
+                            level=Qgis.Info,
+                            notifyUser=False,
+                        )
+                    else:
+                        QgsMessageLog.logMessage(
+                            "The single file change watch was successfully restored.",
+                            tag="Reloader",
+                            level=Qgis.Info,
+                            notifyUser=False,
+                        )
+        except Exception as e:
+            warn_and_log(f"Error restoring file watches: {str(e)}")
+
     # Both notify the user and log a message
     def warn_and_log(self, message):
         self.iface.messageBar().pushMessage(
@@ -247,6 +330,9 @@ class Reloader:
         for action in self.actions:
             self.iface.removePluginMenu(self.tr("&Reloader"), action)
             self.iface.removeToolBarIcon(action)
+
+        # Stop listening for project-loaded signal
+        self.iface.projectRead.disconnect(self.reconnectWatches)
 
     def reload(self):
         """Reload selected layer(s)."""
@@ -285,170 +371,180 @@ class Reloader:
         else:
             for layer in layers:
                 layer.reload()
+                self.watch_layer(layer)
 
-                QgsMessageLog.logMessage(
-                    f'Attempting to add watch for "{layer.name()}"',
-                    tag="Reloader",
-                    level=Qgis.Info,
-                    notifyUser=False,
-                )
+    def watch_layer(self, layer):
+        """Attempt to add a file change to specified layer.  Returns True on success, False on failure."""
+        QgsMessageLog.logMessage(
+            f'Attempting to add watch for "{layer.name()}"',
+            tag="Reloader",
+            level=Qgis.Info,
+            notifyUser=False,
+        )
 
-                # Get layer's provider type (the provider is the I/O handler)
-                provider_type = layer.providerType()
+        # Get layer's provider type (the provider is the I/O handler)
+        provider_type = layer.providerType()
 
-                # Get layer's provider (the provider is the I/O handler)
-                provider = layer.dataProvider()
+        # Get layer's provider (the provider is the I/O handler)
+        provider = layer.dataProvider()
 
-                if provider is None:
-                    # No provider (not sure when this could occur)
+        if provider is None:
+            # No provider (not sure when this could occur)
 
-                    # Notify the user and log the error
-                    self.warn_and_log( f"Can't watch {layer.name()} for updates because it has no provider." )
+            # Notify the user and log the error
+            self.warn_and_log( f"Can't watch {layer.name()} for updates because it has no provider." )
 
-                    # Don't attempt to watch the layer (but keep trying to add any other selected layers)
-                    continue
+            # Don't attempt to watch the layer (but keep trying to add any other selected layers)
+            return False
 
-                # Get the URI containing the layer's data
-                uri=provider.dataSourceUri()
+        # Get the URI containing the layer's data
+        uri=provider.dataSourceUri()
 
-                # Split the URI into its component parts (e.g. "path", "layerName", "url")
-                components=QgsProviderRegistry.instance().decodeUri(providerKey=provider_type, uri=uri)
+        # Split the URI into its component parts (e.g. "path", "layerName", "url")
+        components=QgsProviderRegistry.instance().decodeUri(providerKey=provider_type, uri=uri)
 
-                # Get the data file's path
-                # Not all layers will have this (e.g. ArcGIS REST layers don't; they have a "uri" component instead)
-                if not 'path' in components:
-                    # Layer's data source does not appear to be a local file
+        # Get the data file's path
+        # Not all layers will have this (e.g. ArcGIS REST layers don't; they have a "uri" component instead)
+        if not 'path' in components:
+            # Layer's data source does not appear to be a local file
 
-                    # Notify the user and log the error
-                    self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local file." )
+            # Notify the user and log the error
+            self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local file." )
 
-                    # Don't attempt to watch the layer (but keep trying to add any other selected layers)
-                    continue
+            # Don't attempt to watch the layer (but keep trying to add any other selected layers)
+            return False
 
-                # A "path" value is present, get its value
-                # (This is the name of the local data file containing the layer's data)
-                path = components['path']
+        # A "path" value is present, get its value
+        # (This is the name of the local data file containing the layer's data)
+        path = components['path']
 
-                QgsMessageLog.logMessage(
-                    f'Path: {path}',
-                    tag="Reloader",
-                    level=Qgis.Info,
-                    notifyUser=False,
-                )
+        QgsMessageLog.logMessage(
+            f'Path: {path}',
+            tag="Reloader",
+            level=Qgis.Info,
+            notifyUser=False,
+        )
 
-                # Verify that the file containing the layer's data actually exists
-                if not isfile(path):
-                    # Path doesn't specify an extant local file
+        # Verify that the file containing the layer's data actually exists
+        if not isfile(path):
+            # Path doesn't specify an extant local file
 
-                    # Notify the user and log the error
-                    self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local path." )
+            # Notify the user and log the error
+            self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local path." )
 
-                else:
-                    # The file containing the layer's data exists
+            return False
 
+        else:
+            # The file containing the layer's data exists
+
+            QgsMessageLog.logMessage(
+                f"Creating callback",
+                tag="Reloader",
+                level=Qgis.Info,
+                notifyUser=False,
+            )
+
+            # Callback to perform the refresh of the appropriate layer
+            # This is called by watcher when a watched file changes.
+            #
+            # path:     The file being watched
+            #           This is set by the watcher to the path of the
+            #           file whose change triggered the callback,
+            #           irrespective of what value was specified when
+            #           the callback was connected to the watcher.
+            # layer_id: The ID of the layer to be reloaded
+            #
+            # Note: The "layer_id=layer.id()" syntax used in the call-
+            # back definition explicitly sets the layer_id argument's
+            # value to the current layer's ID at the time the callback
+            # is created.  If one were to omit "layer_id=layer.id()" 
+            # and instead set layer_id in the watch() function's loop 
+            # then the layer_id passed to the callback would be the 
+            # layer_id value of the final iteration of the loop.  In 
+            # other words, parameters to the callback function must be 
+            # explicitly set in the callback's definition (this does 
+            # not apply to the path parameter since its value is set by 
+            # the watcher at the time the callback is called).  For 
+            # further discussion of this see:
+            # http://jceipek.com/Olin-Coding-Tutorials/
+            def reload_callback(path, layer_id=layer.id()):
+
+                # Get the layer object for the relevant layer's ID
+                # Returns None if no layer with the given ID exists
+                layer = QgsProject.instance().mapLayer(layer_id)
+
+                if layer is None:
+                    # Layer for given ID does not exist
+                    
+                    # Layer was being watched but the layer was deleted
+                    # and subsequently the layer's watched file changed
+                    
                     QgsMessageLog.logMessage(
-                        f"Creating callback",
+                        "Reloading layer\n" +
+                        "The layer for the watched file was deleted, removing its watcher\n" +
+                        f"Layer ID: {layer_id}\n" +
+                        f"Path:     {path}",
                         tag="Reloader",
                         level=Qgis.Info,
                         notifyUser=False,
                     )
-
-                    # Callback to perform the refresh of the appropriate layer
-                    # This is called by watcher when a watched file changes.
-                    #
-                    # path:     The file being watched
-                    #           This is set by the watcher to the path of the
-                    #           file whose change triggered the callback,
-                    #           irrespective of what value was specified when
-                    #           the callback was connected to the watcher.
-                    # layer_id: The ID of the layer to be reloaded
-                    #
-                    # Note: The "layer_id=layer.id()" syntax used in the call-
-                    # back definition explicitly sets the layer_id argument's
-                    # value to the current layer's ID at the time the callback
-                    # is created.  If one were to omit "layer_id=layer.id()" 
-                    # and instead set layer_id in the watch() function's loop 
-                    # then the layer_id passed to the callback would be the 
-                    # layer_id value of the final iteration of the loop.  In 
-                    # other words, parameters to the callback function must be 
-                    # explicitly set in the callback's definition (this does 
-                    # not apply to the path parameter since its value is set by 
-                    # the watcher at the time the callback is called).  For 
-                    # further discussion of this see:
-                    # http://jceipek.com/Olin-Coding-Tutorials/
-                    def reload_callback(path, layer_id=layer.id()):
-
-                        # Get the layer object for the relevant layer's ID
-                        # Returns None if no layer with the given ID exists
-                        layer = QgsProject.instance().mapLayer(layer_id)
-
-                        if layer is None:
-                            # Layer for given ID does not exist
-                            
-                            # Layer was being watched but the layer was deleted
-                            # and subsequently the layer's watched file changed
-                            
-                            QgsMessageLog.logMessage(
-                                "Reloading layer\n" +
-                                "The layer for the watched file was deleted, removing its watcher\n" +
-                                f"Layer ID: {layer_id}\n" +
-                                f"Path:     {path}",
-                                tag="Reloader",
-                                level=Qgis.Info,
-                                notifyUser=False,
-                            )
-                            
-                            # Get the watcher for this [removed] layer
-                            watcher = self.watchers.pop(layer_id, None)
-                            # Sanity check
-                            if watcher is None:
-                                # Shouldn't happen
-                                QgsMessageLog.logMessage(
-                                    "Can't stop watching the removed layer because we never started watching it!",
-                                    tag="Reloader",
-                                    level=Qgis.Warning,
-                                    notifyUser=False,
-                                )
-                            else:
-                                # Delete the removed layer's watcher
-                                del watcher
-                            # No further actions
-                            return;
-
-                        # Layer still exists
-
+                    
+                    # Get the watcher for this [removed] layer
+                    watcher = self.watchers.pop(layer_id, None)
+                    # Sanity check
+                    if watcher is None:
+                        # Shouldn't happen
                         QgsMessageLog.logMessage(
-                            "Reloading layer\n"
-                            + f"ID:    {layer.id()}\n"
-                            + f"Name:  {layer.name()}\n"
-                            + f"Path:  {path}",
+                            "Can't stop watching the removed layer because we never started watching it!",
+                            tag="Reloader",
+                            level=Qgis.Warning,
+                            notifyUser=False,
+                        )
+                    else:
+                        # Delete the removed layer's watcher
+                        del watcher
+                    # No further actions
+                    return;
+
+                # Layer still exists
+
+                QgsMessageLog.logMessage(
+                    "Reloading layer\n"
+                    + f"ID:    {layer.id()}\n"
+                    + f"Name:  {layer.name()}\n"
+                    + f"Path:  {path}",
+                    tag="Reloader",
+                    level=Qgis.Info,
+                    notifyUser=False,
+                )
+
+                # Update the layer
+                layer.reload()
+                layer.triggerRepaint()
+
+                # Re-add the watch if change was not in-place
+                # See https://doc.qt.io/qt-6/qfilesystemwatcher.html#fileChanged
+                if path not in self.watchers[layer.id()].files():
+                    if isfile(path):
+                        QgsMessageLog.logMessage(
+                            "Non-in-place file update, reinstalling watch",
                             tag="Reloader",
                             level=Qgis.Info,
                             notifyUser=False,
                         )
+                        self.watchers[layer.id()].addPath(path)
 
-                        # Update the layer
-                        layer.reload()
-                        layer.triggerRepaint()
+            # Install watcher for this path
+            # Callback's arguments are set via its definition, above
+            watcher = QFileSystemWatcher()
+            watcher.addPath(path)
+            watcher.fileChanged.connect(reload_callback)
+            self.watchers[layer.id()] = watcher
 
-                        # Re-add the watch if change was not in-place
-                        # See https://doc.qt.io/qt-6/qfilesystemwatcher.html#fileChanged
-                        if path not in self.watchers[layer.id()].files():
-                            if isfile(path):
-                                QgsMessageLog.logMessage(
-                                    "Non-in-place file update, reinstalling watch",
-                                    tag="Reloader",
-                                    level=Qgis.Info,
-                                    notifyUser=False,
-                                )
-                                self.watchers[layer.id()].addPath(path)
+            # Persist the watch (will be saved to the project file)
+            layer.setCustomProperty("reloader/watchLayer", True)
 
-                    # Install watcher for this path
-                    # Callback's arguments are set via its definition, above
-                    watcher = QFileSystemWatcher()
-                    watcher.addPath(path)
-                    watcher.fileChanged.connect(reload_callback)
-                    self.watchers[layer.id()] = watcher
+            return True
 
     def unwatch(self):
         """Stop watching selected layer(s) for changes."""
@@ -461,24 +557,30 @@ class Reloader:
         else:
             # Iterate through selected layers
             for layer in layers:
-                # Get watcher for the current layer (or None if none is present)
-                watcher = self.watchers.pop(layer.id(), None)
-                if watcher is None:
-                    # No watcher for layer
+                self.unwatch_layer(layer)
 
-                    # Notify the user and log the error
-                    self.warn_and_log( f"Can't stop watching {layer.name()} because we never started watching it." )
+    def unwatch_layer(self, layer):
+        # No longer persist the watch
+        layer.removeCustomProperty("reloader/watchLayer")
 
-                else:
-                    # Layer has a watcher
+        # Get watcher for the current layer (or None if none is present)
+        watcher = self.watchers.pop(layer.id(), None)
+        if watcher is None:
+            # No watcher for layer
 
-                    QgsMessageLog.logMessage(
-                        f"No longer watching {layer.name()}\n" +
-                        f"Path: {watcher.files()[0]}",
-                        tag="Reloader",
-                        level=Qgis.Info,
-                        notifyUser=False,
-                    )
+            # Notify the user and log the error
+            self.warn_and_log( f"Can't stop watching {layer.name()} because we never started watching it." )
 
-                    # Remove the layer's watcher
-                    del watcher
+        else:
+            # Layer has a watcher
+
+            QgsMessageLog.logMessage(
+                f"No longer watching {layer.name()}\n" +
+                f"Path: {watcher.files()[0]}",
+                tag="Reloader",
+                level=Qgis.Info,
+                notifyUser=False,
+            )
+
+            # Remove the layer's watcher
+            del watcher
