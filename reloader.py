@@ -285,7 +285,10 @@ class Reloader:
         else:
             for layer in layers:
                 layer.reload()
+                self.watch_layer(layer)
 
+    def watch_layer(self, layer):
+                """Attempt to add a file change watcher to specified layer.  Returns True on success, False on failure."""
                 QgsMessageLog.logMessage(
                     f'Attempting to add watch for "{layer.name()}"',
                     tag="Reloader",
@@ -306,7 +309,7 @@ class Reloader:
                     self.warn_and_log( f"Can't watch {layer.name()} for updates because it has no provider." )
 
                     # Don't attempt to watch the layer (but keep trying to add any other selected layers)
-                    continue
+                    return False
 
                 # Get the URI containing the layer's data
                 uri=provider.dataSourceUri()
@@ -323,7 +326,7 @@ class Reloader:
                     self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local file." )
 
                     # Don't attempt to watch the layer (but keep trying to add any other selected layers)
-                    continue
+                    return False
 
                 # A "path" value is present, get its value
                 # (This is the name of the local data file containing the layer's data)
@@ -342,6 +345,8 @@ class Reloader:
 
                     # Notify the user and log the error
                     self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local path." )
+
+                    return False
 
                 else:
                     # The file containing the layer's data exists
@@ -443,12 +448,21 @@ class Reloader:
                                 )
                                 self.watchers[layer.id()].addPath(path)
 
+                    QgsMessageLog.logMessage(
+                        f'Installing callbacks for "{layer.name()}"',
+                        tag="Reloader",
+                        level=Qgis.Info,
+                        notifyUser=False,
+                    )
+
                     # Install watcher for this path
                     # Callback's arguments are set via its definition, above
                     watcher = QFileSystemWatcher()
                     watcher.addPath(path)
                     watcher.fileChanged.connect(reload_callback)
                     self.watchers[layer.id()] = watcher
+
+                    return True
 
     def unwatch(self):
         """Stop watching selected layer(s) for changes."""
@@ -461,6 +475,9 @@ class Reloader:
         else:
             # Iterate through selected layers
             for layer in layers:
+                self.unwatch_layer(layer)
+
+    def unwatch_layer(self, layer):
                 # Get watcher for the current layer (or None if none is present)
                 watcher = self.watchers.pop(layer.id(), None)
                 if watcher is None:
