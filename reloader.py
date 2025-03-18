@@ -329,25 +329,25 @@ class Reloader:
         self.info( 'Applying watches to newly-loaded project' )
 
         # These two variables are used only for messages to the user
-        global watchesFound, watchesInstalled
-        watchesFound = 0
-        watchesInstalled = 0
+        global watches_found, watches_installed
+        watches_found = 0
+        watches_installed = 0
 
         # Reconnect node watche to a single node (recusive function)
         def reconnect_node_watches(node):
-            global watchesFound, watchesInstalled
+            global watches_found, watches_installed
             if QgsLayerTree.isLayer(node):
                 # Node is a layer, not a group
                 # Get the layer object that node is associated with
                 layer = node.layer()
                 # Check whether we should watch the layer
                 if hasattr(node, "customProperty"):
-                    watchActive = layer.customProperty("reloader/watchLayer")
-                    if watchActive:
+                    watch_active = layer.customProperty("reloader/watchLayer")
+                    if watch_active:
                         # Layer should be watched
-                        watchesFound += 1
+                        watches_found += 1
                         # Try to install a watch for this layer
-                        watchesInstalled += self.watchLayer(layer)
+                        watches_installed += self.watchLayer(layer)
             # If node is a group then visit its children
             for child in node.children():
                 reconnect_node_watches(child)
@@ -358,14 +358,14 @@ class Reloader:
         self.updateStatusIcons()
 
         # Give the user an overview of what was loaded
-        if watchesFound == 0:
+        if watches_found == 0:
             self.info("No watches were found for any of the project's layers.")
         else:
-            if watchesInstalled != watchesFound:
-                self.info(f"File change watches were successfully restored for some (but not all) of the project's layers that are marked as being watched. ({watchesInstalled} of {watchesFound} installed)")
+            if watches_installed != watches_found:
+                self.info(f"File change watches were successfully restored for some (but not all) of the project's layers that are marked as being watched. ({watches_installed} of {watches_found} installed)")
             else:
-                if watchesInstalled > 1:
-                    self.info(f"All {watchesInstalled} file change watches were successfully restored.")
+                if watches_installed > 1:
+                    self.info(f"All {watches_installed} file change watches were successfully restored.")
                 else:
                         self.info("The single file change watch was successfully restored.")
 
@@ -855,8 +855,8 @@ class Reloader:
             if QgsLayerTree.isLayer(node):
                 layer = node.layer()
                 if hasattr(layer, "customProperty"):
-                    watchActive = layer.customProperty("reloader/watchLayer")
-                    if watchActive == True:
+                    watch_active = layer.customProperty("reloader/watchLayer")
+                    if watch_active == True:
                         self.iface.layerTreeView().addIndicator(node, self.indicator)
                     else:
                         self.iface.layerTreeView().removeIndicator(node, self.indicator)
@@ -877,8 +877,8 @@ class Reloader:
             if QgsLayerTree.isLayer(node):
                 layer = node.layer()
                 if hasattr(node, "customProperty"):
-                    watchActive = layer.customProperty("reloader/watchLayer")
-                    if watchActive:
+                    watch_active = layer.customProperty("reloader/watchLayer")
+                    if watch_active:
                         self.iface.layerTreeView().removeIndicator(node, self.indicator)
 
             for child in node.children():
