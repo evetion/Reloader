@@ -302,7 +302,7 @@ class Reloader:
         # backed by local files that are already being watched.
         project = QgsProject.instance()
         if project is not None:
-            project.legendLayersAdded.connect( self.getLayerAddedCallback() )
+            project.legendLayersAdded.connect( self.getLegendLayersAddedCallback() )
         
         # Attempt to reconnect all watchers set in the current project
         if self.iface.activeLayer():
@@ -310,7 +310,7 @@ class Reloader:
         
     # END def initGui(self):
 
-    def getLayerAddedCallback(self):
+    def getLegendLayersAddedCallback(self):
         """
         Get the layer added callback.
         
@@ -318,7 +318,7 @@ class Reloader:
         member function [which would lack a self context].  (The function
         has access to the enclosing method's self object.)
         """
-        def layersAddedToLayerTree(added_layers):
+        def legend_layers_added_callback(added_layers):
             """
             CALLBACK
             Called when one or more layers are added to the project's layer tree
@@ -335,8 +335,9 @@ class Reloader:
                         # Local file is being watched
                         # Add newly-added layer to the extant watch
                         self.watchLayer(layer)
-        return layersAddedToLayerTree
-    # END def layersAddedToLayerTree(added_layers):
+        # END def legend_layers_added_callback(added_layers):
+        return legend_layers_added_callback
+    # END def getLegendLayersAddedCallback(self):
 
     def reconnectWatches(self):
         """
