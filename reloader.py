@@ -14,6 +14,11 @@
  ***************************************************************************/
 
 /***************************************************************************
+ Updated 2025-03-23:
+
+ o Fixed bug where watch status icons disappeared if layer was grouped or moved.
+   https://github.com/Alex-Kent/Reloader/issues/1
+
  Updated 2025-03-17:
 
  o Major code refactoring:
@@ -328,6 +333,74 @@ class Reloader:
 
         self.info( 'Applying watches to newly-loaded project' )
 
+        # Signal handler(s) for when layers are moved, grouped, etc.
+        
+ #       def rows_moved_callback(parent, start, end, destination, row):
+#            """
+#            CALLBACK
+#            Called after rows have been moved within the model
+#            The items between start and end inclusive, under the given parent 
+#            item have been moved to destination starting at the row row.
+#            
+#            This signal does not appear to be used for the QGIS layers tree
+#            
+#            :param parent: Proxy model index corresponding to the layer tree 
+#                view that the items were moved from
+#            :type parent: QModelIndex
+#            
+#            :param start: Index of first item in parent that was moved
+#            :type start: int
+#            
+#            :param end: Index of last item in parent that was moved
+#            :type end: int
+#            
+#            :param destination: Proxy model index corresponding to the layer 
+#                 tree view that the items were moved from
+#            :type destination: QModelIndex
+#            
+#            :param last: Start index in destination that items were moved to
+#            :type last: int
+#            """
+#            self.info(f"rows_moved_callback({parent}, {start}, {end}, {destination}, {row})" )
+#            
+#            rows_inserted_callback(destination, row, row+(end-start))
+        
+        # Get root node of QgsLayerTree (needed in the callback)
+        root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
+        
+        def rows_inserted_callback(parent, first, last):
+            """
+            CALLBACK
+            Called when layers are moved, grouped, etc.
+            
+            :param parent: Proxy model index corresponding to the layer tree view
+            :type parent: QModelIndex
+            
+            :param first: Index of first inserted item in parent
+            :type first: int
+            
+            :param last: Index of last inserted item in parent
+            :type last: int
+            """
+            
+            self.info(f"rows_inserted_callback({parent}, {first}, {last})" )
+            for node in root_node.findLayers(): # List[QgsLayerTreeLayer]
+                if QgsLayerTree.isLayer(node):
+                    layer = node.layer()
+                    if hasattr(node, "customProperty"):
+                        watch_active = layer.customProperty("reloader/watchLayer")
+                        if watch_active:
+                            self.info(f"Node has reloader/watchLayer'\n" +
+                                      f"Node: '{node.name()}'\n" +
+                                      f"Node's layer: '{layer.name()}'  {layer.id()}")
+                            self.iface.layerTreeView().addIndicator(node, self.indicator)
+        
+        # Set callback to reinstall icons when watched layers are moved or grouped
+        model = self.iface.layerTreeView().layerTreeModel()
+        model.rowsInserted.connect( rows_inserted_callback )
+#        # Technically might also be needed.  (not seen with QGIS layers tree)
+#        model.rowsMoved.connect( rows_moved_callback )
+        
         # These two variables are used only for messages to the user
         global watches_found, watches_installed
         watches_found = 0
