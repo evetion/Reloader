@@ -157,6 +157,7 @@ class Reloader:
         
         # The callback singleton for handling all file changed signals
         self.fileChangedCallbackFunction = None
+    # END def __init__(self, iface):
 
 
     # noinspection PyMethodMayBeStatic
@@ -173,6 +174,7 @@ class Reloader:
         """
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate("Reloader", message)
+    # END def tr(self, message):
 
     def addAction(
         self,
@@ -348,7 +350,7 @@ class Reloader:
         
         # Signal handler(s) for when layers are moved, grouped, etc.
         
- #       def rows_moved_callback(parent, start, end, destination, row):
+#        def rows_moved_callback(parent, start, end, destination, row):
 #            """
 #            CALLBACK
 #            Called after rows have been moved within the model
@@ -377,6 +379,7 @@ class Reloader:
 #            self.info(f"rows_moved_callback({parent}, {start}, {end}, {destination}, {row})" )
 #            
 #            rows_inserted_callback(destination, row, row+(end-start))
+#       # END def rows_moved_callback(parent, start, end, destination, row):
         
         # Get root node of QgsLayerTree (needed in the callback)
         root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
@@ -404,6 +407,7 @@ class Reloader:
                         watch_active = layer.customProperty("reloader/watchLayer")
                         if watch_active:
                             self.iface.layerTreeView().addIndicator(node, self.indicator)
+        # END def rows_inserted_callback(parent, first, last):
         
         # Set callback to reinstall icons when watched layers are moved or grouped
         model = self.iface.layerTreeView().layerTreeModel()
@@ -439,6 +443,8 @@ class Reloader:
             # If node is a group then visit its children
             for child in node.children():
                 reconnect_node_watches(child)
+        # END def reconnect_node_watches(node):
+        
         # Reconnect file change watchers for the entire layers tree
         root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
         reconnect_node_watches(root_node)
@@ -691,6 +697,7 @@ class Reloader:
             #self.info(f'Data source changed for "{layer.name()}"')
             self.unwatchLayer(layer, onlySpecifiedLayer=True)
             self.watchLayer(layer)
+        # END def data_source_changed_callback(layer=layer):
         
         layer.dataSourceChanged.connect(data_source_changed_callback)
     # END def addDataSourceChangedCallback(self, layer):
@@ -753,7 +760,7 @@ class Reloader:
                     # Update the layer
                     layer.reload()
                     layer.triggerRepaint()
-        # END def reload_callback(path)
+        # END def file_changed_callback(path)
         
         if self.fileChangedCallbackFunction is None:
             self.fileChangedCallbackFunction = file_changed_callback
@@ -834,6 +841,8 @@ class Reloader:
             # Stop watching the layer
             self.info(f"Layer is about to be deleted: {layer.id()}")
             self.unwatchLayer(layer, onlySpecifiedLayer=True)
+        # END def will_be_deleted_callback(layer=layer):
+        
         # Add callback to layer
         layer.willBeDeleted.connect(will_be_deleted_callback)
         
@@ -885,6 +894,8 @@ class Reloader:
                 for child in node.children():
                     number_of_watchers_added += add_watch_to_layers_with_same_path(child)
                 return number_of_watchers_added
+            # END def add_watch_to_layers_with_same_path(node):
+            
             root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
             number_of_watchers_added += add_watch_to_layers_with_same_path(root_node)
         
@@ -911,7 +922,7 @@ class Reloader:
             # Layer for given ID does not exist
             # No longer persist the watch (if a watch had been previously set)
             self.unwatchLayerID( layer.id(), onlySpecifiedLayer, quiet )
-    # END def unwatchLayer(self, layer):
+    # END def unwatchLayer(self, layer, onlySpecifiedLayer=False, quiet=False):
 
     def unwatchLayerID(self, layer_id, onlySpecifiedLayer=False, quiet=False):
         """
@@ -996,7 +1007,7 @@ class Reloader:
                 for layer_id in self.layerIDsForPath[ previous_path ]:
                     self.unwatchLayerID(layer_id)
         
-    # END def unwatchLayerID(self, layer_id):
+    # END unwatchLayerID(self, layer_id, onlySpecifiedLayer=False, quiet=False):
 
     def layerHasWatch(self, layer):
         """
@@ -1010,6 +1021,7 @@ class Reloader:
             return True
         else:
             return False
+    # END def layerHasWatch(self, layer):
 
     def unwatchCallback(self):
         """
@@ -1063,6 +1075,7 @@ class Reloader:
                         self.iface.layerTreeView().removeIndicator(node, self.indicator)
             for child in node.children():
                 update_node_status_icons(child)
+        # END def update_node_status_icons(node):
         
         root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
         update_node_status_icons(root_node)
@@ -1090,6 +1103,7 @@ class Reloader:
                         self.iface.layerTreeView().removeIndicator(node, self.indicator)
             for child in node.children():
                 remove_node_status_icons(child)
+        # END def remove_node_status_icons(node):
         
         root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
         remove_node_status_icons(root_node)
