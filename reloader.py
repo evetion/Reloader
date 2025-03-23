@@ -18,6 +18,8 @@
 
  o Fixed bug where watch status icons disappeared if layer was grouped or moved.
    https://github.com/Alex-Kent/Reloader/issues/1
+ o Improved comments: documented method and function arguments, etc.
+ o Renamed variables to match the objects type (node vs. layer).
 
  Updated 2025-03-17:
 
@@ -108,7 +110,13 @@ from qgis.core import QgsLayerTree
 from qgis.gui import QgsLayerTreeViewIndicator
 
 class Reloader:
-    """QGIS Plugin Implementation."""
+    """
+    QGIS Plugin Implementation.
+
+    In the code below the variables terms node and layer have specific meanings:
+        node:   QgsLayerTreeNode  (QgsLayerTreeGroup, QgsLayerTreeLayer, etc.)
+        layer:  QgsMapLayer (e.g. QgsVectorLayer)
+    """
 
     def __init__(self, iface):
         """Constructor.
@@ -160,7 +168,7 @@ class Reloader:
         :param message: String for translation.
         :type message: str, QString
 
-        :returns: Translated version of message.
+        :return: Translated version of message.
         :rtype: QString
         """
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
@@ -212,7 +220,7 @@ class Reloader:
         :param whats_this: Optional text to show in the status bar when the
             mouse pointer hovers over the action.
 
-        :returns: The action that was created. Note that the action is also
+        :return: The action that was created. Note that the action is also
             added to self.actions list.
         :rtype: QAction
         """
@@ -312,7 +320,11 @@ class Reloader:
         """
         def layersAddedToLayerTree(added_layers):
             """
+            CALLBACK
             Called when one or more layers are added to the project's layer tree
+
+            :param layers: List of QgsMapLayer which were added to the legend.
+            :type layers: List[QgsMapLayer]  (QgsMapLayer is e.g. QgsVectorLayer)
             """
 
             for layer in added_layers:
@@ -406,8 +418,13 @@ class Reloader:
         watches_found = 0
         watches_installed = 0
 
-        # Reconnect node watche to a single node (recusive function)
         def reconnect_node_watches(node):
+            """
+            Reconnect node watchers to a single node (recusive function)
+
+            :param node: The current node in the layers tree
+            :type node: QgsLayerTreeNode  (QgsLayerTreeGroup, QgsLayerTreeLayer, etc.)
+            """
             global watches_found, watches_installed
             if QgsLayerTree.isLayer(node):
                 # Node is a layer, not a group
@@ -425,8 +442,8 @@ class Reloader:
             for child in node.children():
                 reconnect_node_watches(child)
         # Reconnect file change watchers for the entire layers tree
-        root = self.iface.layerTreeView().layerTreeModel().rootGroup()
-        reconnect_node_watches(root)
+        root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
+        reconnect_node_watches(root_node)
 
         self.updateStatusIcons()
 
@@ -444,8 +461,13 @@ class Reloader:
 
     # END def reconnectWatches(self):
 
-    # Both notify the user and log a message
     def warnAndLog(self, message):
+        """
+        Both notify the user and log a message
+
+        :param message: The message to display
+        :type message: str, QString
+        """
         self.iface.messageBar().pushMessage(
             "Warning",
             message,
@@ -460,8 +482,13 @@ class Reloader:
         )
     # END def warnAndLog(self, message):
 
-    # Log a message with warning level
     def warning(self, message):
+        """
+        Log a message with warning level
+
+        :param message: The message to display
+        :type message: str, QString
+        """
         QgsMessageLog.logMessage(
             message,
             tag="Reloader",
@@ -470,8 +497,13 @@ class Reloader:
         )
     # END def warning(self, message):
 
-    # Log a message with informational level
     def info(self, message):
+        """
+        Log a message with informational level
+
+        :param message: The message to display
+        :type message: str, QString
+        """
         QgsMessageLog.logMessage(
             message,
             tag="Reloader",
@@ -481,7 +513,9 @@ class Reloader:
     # END def info(self, message):
 
     def unload(self):
-        """Removes the plugin menu item and icon from QGIS GUI."""
+        """
+        Removes the plugin menu item and icon from QGIS GUI
+        """
         for action in self.actions:
             self.iface.removePluginMenu(self.tr("&Reloader"), action)
             self.iface.removeToolBarIcon(action)
@@ -512,11 +546,15 @@ class Reloader:
 
     def reloadCallback(self):
         """
-        Reload selected layer(s).
+        CALLBACK
+        Reload selected layer(s)
+
         Called when user selects "Reload selected layer(s)"
         """
 
-        # Determine which layers are currently selected
+        # Determine which layer tree layers are currently selected
+        # layers is List[QgsMapLayer]  (QgsMapLayer is e.g. QgsVectorLayer)
+        # *** FIXME - Add support for selectedLayersRecursive (since 3.4) ***
         layers = self.iface.layerTreeView().selectedLayers()
 
         if len(layers) == 0:
@@ -531,12 +569,19 @@ class Reloader:
 
     def reopenCallback(self):
         """
-        Reopen selected layer(s), which also updates the extent in contrast to 
-        `reloadCallback` which keeps does not update the layer's extent.
+        CALLBACK
+        Reopen selected layer(s)
+
+        This reloads the data and also updates the layer's extent.  This is in
+        contrast to `reloadCallback` which keeps does not update the layer's
+        extent.
+
         Called when user selects "Reopen selected layer(s)"
         """
 
         # Determine which layers are currently selected
+        # layers is List[QgsMapLayer]  (QgsMapLayer is e.g. QgsVectorLayer)
+        # *** FIXME - Add support for selectedLayersRecursive (since 3.4) ***
         layers = self.iface.layerTreeView().selectedLayers()
 
         if len(layers) == 0:
@@ -551,13 +596,18 @@ class Reloader:
 
     def watchCallback(self):
         """
-        Start watching selected layer(s) for changes.
-        Called when user selects "Start watching layer(s) for changes"
+        CALLBACK
+        Start watching selected layer(s) for changes
+
+        Called when user selects "Start watching layer(s) for changes".
+
         All layers backed by the same file as one of the selected layers will
         also be watched.
         """
 
         # Determine which layers are currently selected
+        # layers is List[QgsMapLayer]  (QgsMapLayer is e.g. QgsVectorLayer)
+        # *** FIXME - Add support for selectedLayersRecursive (since 3.4) ***
         layers = self.iface.layerTreeView().selectedLayers()
 
         if len(layers) == 0:
@@ -572,11 +622,17 @@ class Reloader:
 
     def getLayerPath(self, layer):
         """
-        Returns the path of the local file backing the specified layer.
-        Returns None f no such file exists.
+        Get local file path (if any) associated with the given layer
 
-                This method determines the path based on the layer's data provider; it
+        This method determines the path based on the layer's data provider; it
         does not rely on any cached data.
+
+        :param layer: The layer to query
+        :type layer: QgsMapLayer  (e.g. QgsVectorLayer)
+
+        :return: Path of the local file backing the specified layer
+            or None if no such file exists.
+        :rtype: QString
         """
 
         # Get layer's provider type (the provider is the I/O handler)
@@ -616,35 +672,52 @@ class Reloader:
 
     def addDataSourceChangedCallback(self, layer):
         """
-        Install data source definition changed callback
-        This is called when the data set definition (e,g, its path) is changed
-        for a given layer.
-        Note that this is not the same as a change in the file pointed to by
-        the data source definition.
+        Install layer data source definition changed callback
+
+        :param layer: The layer to add the callback to.
+        :type layer: QgsMapLayer  (e.g. QgsVectorLayer)
         """
+
         def data_source_changed_callback(layer=layer):
+            """
+            CALLBACK
+            This is called when the data set definition (e,g, its path) is
+            changed for a given layer.
+
+            Note that this is not the same as a change in the file pointed
+            to by the data source definition.
+
+            :param layer: The layer that is to be deleted
+            :type layer: QgsMapLayer  (e.g. QgsVectorLayer)
+            """
             #self.info(f'Data source changed for "{layer.name()}"')
             self.unwatchLayer(layer, onlySpecifiedLayer=True)
             self.watchLayer(layer)
+
         layer.dataSourceChanged.connect(data_source_changed_callback)
     # END def addDataSourceChangedCallback(self, layer):
 
     def getFileChangedCallbackFunction(self):
         """
         Returns file change callback singleton
+
+        A single callback function is shared by all file change watchers.
         """
 
-        """
-        Callback to perform the refresh of the appropriate layer
-        This is called by watcher when a watched file changes.
-        
-        path:     The file being watched
-                  This is set by the watcher to the path of the
-                  file whose change triggered the callback,
-                  irrespective of what value was specified when
-                  the callback was connected to the watcher.
-        """
         def file_changed_callback(path):
+            """
+            CALLBACK
+            Perform the refresh of the appropriate layer
+
+            This is called by watcher when a watched file changes.
+
+            Note that the path argument is set by the watcher to the path of
+            the file whose change triggered the callback, irrespective of what
+            value was specified when the callback was connected to the watcher.
+
+            :param path: The local file path to watch
+            :type path: str, QString
+            """
 
             self.info( f'File change for "{path}"' )
 
@@ -659,7 +732,7 @@ class Reloader:
             if path in self.layerIDsForPath:
                 for layer_id in self.layerIDsForPath[path]:
 
-                    # Get the layer object for the relevant layer's ID
+                    # Get the layer object (QgsMapLayer) for the relevant layer's ID
                     # Returns None if no layer with the given ID exists
                     layer = QgsProject.instance().mapLayer(layer_id)
 
@@ -701,6 +774,12 @@ class Reloader:
         
         If any other layers in the layers tree are backed by the same file then
         watches are automatically added to them as well.
+
+        :param layer: The layer to watch
+        :type layer: QgsMapLayer  (e.g. QgsVectorLayer)
+
+        :return: Number of layers that had a file change watcher added to them.
+        :rtype: int
         """
 
         path = self.getLayerPath( layer )
@@ -742,10 +821,22 @@ class Reloader:
         # Persist the watch (will be saved to the project file)
         layer.setCustomProperty("reloader/watchLayer", True)
 
-        # Callback to handle imminent deletion of a layer
         def will_be_deleted_callback(layer=layer):
+            """
+            CALLBACK
+            Called when a layer will be imminently deleted
+
+            The value of the layer parameter is set to that of the enclosing
+            method's layer variable when the callback is instantiated.
+
+            :param layer: The layer that is to be deleted
+            :type layer: QgsMapLayer  (e.g. QgsVectorLayer)
+            """
+
             # Stop watching the layer
+            self.info(f"Layer is about to be deleted: {layer.id()}")
             self.unwatchLayer(layer, onlySpecifiedLayer=True)
+        # Add callback to layer
         layer.willBeDeleted.connect(will_be_deleted_callback)
 
         # Set up the file change watcher for layer's path (if none already exists)
@@ -760,7 +851,19 @@ class Reloader:
             self.watchers[ path ] = watcher
 
             # Also add watches to other layers with the same path as being watched
+
             def add_watch_to_layers_with_same_path(node):
+                """
+                Recursive function to add watches to all other layers with the 
+                same path as the one being watched
+
+                :param node: The node (group or layer) to process
+                :type node: QgsLayerTreeNode  (QgsLayerTreeGroup, QgsLayerTreeLayer, etc.)
+
+                :return: Number of layers in the current group that had a file 
+                    change watcher added to them (including those in subgroups).
+                :rtype: int
+                """
                 number_of_watchers_added = 0
                 if QgsLayerTree.isLayer(node):
                     layer = node.layer()
@@ -780,11 +883,12 @@ class Reloader:
                                 layer.setCustomProperty("reloader/watchLayer", True)
                                 # Add callback to update watcher if layer's data source definition changes
                                 self.addDataSourceChangedCallback(layer)
+                # Process any child nodes (if node is a group)
                 for child in node.children():
                     number_of_watchers_added += add_watch_to_layers_with_same_path(child)
                 return number_of_watchers_added
-            root = self.iface.layerTreeView().layerTreeModel().rootGroup()
-            number_of_watchers_added += add_watch_to_layers_with_same_path(root)
+            root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
+            number_of_watchers_added += add_watch_to_layers_with_same_path(root_node)
 
         # END if not path in self.watchers
 
@@ -801,6 +905,9 @@ class Reloader:
         Removes any watch active for given layer object.
         
         Wrapper for unwatchLayerID(...); see there for details.
+
+        :param layer: The map layer to process
+        :type layer: QgsMapLayer  (e.g. QgsVectorLayer)
         """
         if layer is not None:
             # Layer for given ID does not exist
@@ -814,18 +921,27 @@ class Reloader:
 
         This includes removal from the watchers, pathForLayerID, and
         layerIDForPath structures as well as removal of the layer's
-        reloader/watchLayer custom property.
-
-        If onlySpecifiedLayer is False then the watcher will also be
-        removed from any other layers that are watching the same file.
-
-        If onlySpecifiedLayer is True then the watcher will only be 
-        removed from the specified layer.
+        "reloader/watchLayer" custom property.
 
         The layers tree is not refreshed.
+
+        :param layer_id: The ID of the map layer to process
+        :type layer_id: str, QString
+
+        :param onlySpecifiedLayer: Specifies which layers watching a file should
+            have their watch removed, defaults to False:
+            False: Also remove watcher from any other layers watching it.
+            True:  Remove watcher only from the specified layer.
+                   This is used when a layer tree layer's data source has been
+                   changed, e.g. via the QGIS GUI.
+        :type onlySpecifiedLayer: bool
+
+        :param quiet: True: Suppress log messages, False: Do log messages, 
+            defaults to False.
+        :type quiet: bool
         """
 
-        # Get the layer object for the relevant layer's ID
+        # Get the layer object (QgsMapLayer) for the relevant layer's ID
         # Returns None if no layer with the given ID exists
         layer = QgsProject.instance().mapLayer(layer_id)
 
@@ -886,8 +1002,11 @@ class Reloader:
 
     def layerHasWatch(self, layer):
         """
-        Check whether a watcher is associated with the layer.
+        Check whether a watcher is associated with the layers tree layer.
         Returns True if layer has an associated watcher, False otherwise
+
+        :param layer: The layers tree layer to query
+        :type layer: QgsMapLayer  (e.g. QgsVectorLayer)
         """
         if layer.id() in self.pathForLayerID:
             return True
@@ -903,6 +1022,8 @@ class Reloader:
         """
 
         # Determine which layers are currently selected
+        # layers is List[QgsMapLayer]  (QgsMapLayer is e.g. QgsVectorLayer)
+        # *** FIXME - Add support for selectedLayersRecursive (since 3.4) ***
         layers = self.iface.layerTreeView().selectedLayers()
 
         if len(layers) == 0:
@@ -924,7 +1045,15 @@ class Reloader:
         Updates the status icons displayed in the layers tree to indicate which
         layers are currently being watched.
         """
+
         def update_node_status_icons(node):
+            """
+            Add or remove status icon to node and its children base on whether
+            or not the reloader/watchLayer custom property is set to True.
+
+            :param node: The node (group or layer) to process
+            :type node: QgsLayerTreeNode  (QgsLayerTreeGroup, QgsLayerTreeLayer, etc.)
+            """
             if QgsLayerTree.isLayer(node):
                 layer = node.layer()
                 if hasattr(layer, "customProperty"):
@@ -933,12 +1062,11 @@ class Reloader:
                         self.iface.layerTreeView().addIndicator(node, self.indicator)
                     else:
                         self.iface.layerTreeView().removeIndicator(node, self.indicator)
-
             for child in node.children():
                 update_node_status_icons(child)
 
-        root = self.iface.layerTreeView().layerTreeModel().rootGroup()
-        update_node_status_icons(root)
+        root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
+        update_node_status_icons(root_node)
     # END def updateStatusIcons(self):
 
     def removeAllStatusIcons(self):
@@ -946,17 +1074,24 @@ class Reloader:
         Removes all status icons displayed in the layers tree.
         Does not remove the layers' reloader/watchLayer properties.
         """
+
         def remove_node_status_icons(node):
+            """
+            Remove all status icons from node and its children.
+            Does not remove the layers' reloader/watchLayer properties.
+
+            :param node: The node (group or layer) to process
+            :type node: QgsLayerTreeNode  (QgsLayerTreeGroup, QgsLayerTreeLayer, etc.)
+            """
             if QgsLayerTree.isLayer(node):
                 layer = node.layer()
                 if hasattr(node, "customProperty"):
                     watch_active = layer.customProperty("reloader/watchLayer")
                     if watch_active:
                         self.iface.layerTreeView().removeIndicator(node, self.indicator)
-
             for child in node.children():
                 remove_node_status_icons(child)
 
-        root = self.iface.layerTreeView().layerTreeModel().rootGroup()
-        remove_node_status_icons(root)
+        root_node = self.iface.layerTreeView().layerTreeModel().rootGroup()
+        remove_node_status_icons(root_node)
     # END def removeAllStatusIcons(self):
