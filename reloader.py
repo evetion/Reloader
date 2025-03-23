@@ -395,16 +395,13 @@ class Reloader:
             :type last: int
             """
             
-            self.info(f"rows_inserted_callback({parent}, {first}, {last})" )
+            #self.info(f"rows_inserted_callback({parent}, {first}, {last})" )
             for node in root_node.findLayers(): # List[QgsLayerTreeLayer]
                 if QgsLayerTree.isLayer(node):
                     layer = node.layer()
                     if hasattr(node, "customProperty"):
                         watch_active = layer.customProperty("reloader/watchLayer")
                         if watch_active:
-                            self.info(f"Node has reloader/watchLayer'\n" +
-                                      f"Node: '{node.name()}'\n" +
-                                      f"Node's layer: '{layer.name()}'  {layer.id()}")
                             self.iface.layerTreeView().addIndicator(node, self.indicator)
         
         # Set callback to reinstall icons when watched layers are moved or grouped
@@ -1015,6 +1012,7 @@ class Reloader:
 
     def unwatchCallback(self):
         """
+        CALLBACK
         Stop watching selected layer(s) for changes.
         Called when user selects "Stop watching layer(s) for changes"
         All layers backed by the same file as one of the selected layers will
