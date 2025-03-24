@@ -12,6 +12,6 @@ layer (the one using the watched layer's data, not the watched layer itself) in
 the `Layers` panel and select the relevant watched layer in the list under
 `Dependencies`, then under `Joins` edit the join to the watched layer and make
 sure `Cache join layer in memory` is *not* selected.  After doing this the
-dependent layer should update automatically when the watched file changes.
+dependent layer should update automatically when the watched file changes. 
 
 ![](screenshot.png)

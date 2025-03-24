@@ -6,7 +6,7 @@
 name=Reloader
 qgisMinimumVersion=3.0
 description=Reload selected layer(s) on external changes or on demand.
-version=0.2
+version=0.3
 author=Maarten Pronk, Alexander Hajnal
 email=git@evetion.nl
 
