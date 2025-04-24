@@ -1,0 +1,4 @@
+[tool.qgis-plugin-ci]
+plugin_path = "."
+github_organization_slug = "evetion"
+project_slug = "reloader"

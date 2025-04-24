@@ -1,0 +1,10 @@
+services:
+  qgis:
+    image: qgis/qgis:release-3_34
+    container_name: qgis
+    volumes:
+      - ../:/tests_directory/reloader
+    environment:
+      - CI=true
+      - DISPLAY=:99
+    tty: true
