@@ -8,9 +8,6 @@ jobs:
   test-qgis:
     name: "Test"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .docker
     steps:
       - uses: actions/checkout@v4
       - uses: prefix-dev/setup-pixi@v0.8.8
