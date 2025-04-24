@@ -10,10 +10,14 @@
         git sha              : $Format:%H$
         copyright            : (C) 2023 by Maarten Pronk
         email                : git@evetion.nl
-        version              : 0.2
+        version              : 0.2.1
  ***************************************************************************/
 
 /***************************************************************************
+ Updated 2025-04-15
+
+ o Watching group layers is now supported
+
  Updated 2025-02-13:
 
  o Watching multiple files/layers is now working properly
@@ -55,7 +59,14 @@
 import os.path
 from os.path import isfile
 
-from qgis.core import Qgis
+from qgis.core import (
+    Qgis,
+    QgsLayerTreeGroup,
+    QgsLayerTreeLayer,
+    QgsMessageLog,
+    QgsProject,
+    QgsProviderRegistry,
+)
 from qgis.PyQt.QtCore import (
     QCoreApplication,
     QFileSystemWatcher,
@@ -65,18 +76,6 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
 # Initialize Qt resources from file resources.py
 from .resources import *
-
-# Import the code for the dialog
-# from .reloader_diaslog import ReloaderDialog
-
-# Used for extracting and decoding layers' data file names
-from qgis.core import QgsProviderRegistry
-
-# Used for callback
-from qgis.core import QgsProject
-
-# Used for logging
-from qgis.core import QgsMessageLog
 
 
 class Reloader:
@@ -250,7 +249,7 @@ class Reloader:
 
     def reload(self):
         """Reload selected layer(s)."""
-        layers = self.iface.layerTreeView().selectedLayers()
+        layers = self.get_selected_layers()
 
         if len(layers) == 0:
             mw = self.iface.mainWindow()
@@ -263,7 +262,7 @@ class Reloader:
 
     def reopen(self):
         """Reopen selected layer(s), which also updates the extent in contrast to `reload`."""
-        layers = self.iface.layerTreeView().selectedLayers()
+        layers = self.get_selected_layers()
 
         if len(layers) == 0:
             mw = self.iface.mainWindow()
@@ -276,8 +275,8 @@ class Reloader:
 
     def watch(self):
         """Start watching selected layer(s) for changes."""
-        layers = self.iface.layerTreeView().selectedLayers()
-        print(self.watchers)
+        layers = self.get_selected_layers()
+
         if len(layers) == 0:
             mw = self.iface.mainWindow()
             QMessageBox.warning(mw, "Reloader", "No selected layer(s).")
@@ -303,34 +302,40 @@ class Reloader:
                     # No provider (not sure when this could occur)
 
                     # Notify the user and log the error
-                    self.warn_and_log( f"Can't watch {layer.name()} for updates because it has no provider." )
+                    self.warn_and_log(
+                        f"Can't watch {layer.name()} for updates because it has no provider."
+                    )
 
                     # Don't attempt to watch the layer (but keep trying to add any other selected layers)
                     continue
 
                 # Get the URI containing the layer's data
-                uri=provider.dataSourceUri()
+                uri = provider.dataSourceUri()
 
                 # Split the URI into its component parts (e.g. "path", "layerName", "url")
-                components=QgsProviderRegistry.instance().decodeUri(providerKey=provider_type, uri=uri)
+                components = QgsProviderRegistry.instance().decodeUri(
+                    providerKey=provider_type, uri=uri
+                )
 
                 # Get the data file's path
                 # Not all layers will have this (e.g. ArcGIS REST layers don't; they have a "uri" component instead)
-                if not 'path' in components:
+                if not "path" in components:
                     # Layer's data source does not appear to be a local file
 
                     # Notify the user and log the error
-                    self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local file." )
+                    self.warn_and_log(
+                        f"Can't watch {layer.name()} for updates because it is not a local file."
+                    )
 
                     # Don't attempt to watch the layer (but keep trying to add any other selected layers)
                     continue
 
                 # A "path" value is present, get its value
                 # (This is the name of the local data file containing the layer's data)
-                path = components['path']
+                path = components["path"]
 
                 QgsMessageLog.logMessage(
-                    f'Path: {path}',
+                    f"Path: {path}",
                     tag="Reloader",
                     level=Qgis.Info,
                     notifyUser=False,
@@ -341,7 +346,9 @@ class Reloader:
                     # Path doesn't specify an extant local file
 
                     # Notify the user and log the error
-                    self.warn_and_log( f"Can't watch {layer.name()} for updates because it is not a local path." )
+                    self.warn_and_log(
+                        f"Can't watch {layer.name()} for updates because it is not a local path."
+                    )
 
                 else:
                     # The file containing the layer's data exists
@@ -366,38 +373,37 @@ class Reloader:
                     # Note: The "layer_id=layer.id()" syntax used in the call-
                     # back definition explicitly sets the layer_id argument's
                     # value to the current layer's ID at the time the callback
-                    # is created.  If one were to omit "layer_id=layer.id()" 
-                    # and instead set layer_id in the watch() function's loop 
-                    # then the layer_id passed to the callback would be the 
-                    # layer_id value of the final iteration of the loop.  In 
-                    # other words, parameters to the callback function must be 
-                    # explicitly set in the callback's definition (this does 
-                    # not apply to the path parameter since its value is set by 
-                    # the watcher at the time the callback is called).  For 
+                    # is created.  If one were to omit "layer_id=layer.id()"
+                    # and instead set layer_id in the watch() function's loop
+                    # then the layer_id passed to the callback would be the
+                    # layer_id value of the final iteration of the loop.  In
+                    # other words, parameters to the callback function must be
+                    # explicitly set in the callback's definition (this does
+                    # not apply to the path parameter since its value is set by
+                    # the watcher at the time the callback is called).  For
                     # further discussion of this see:
                     # http://jceipek.com/Olin-Coding-Tutorials/
                     def reload_callback(path, layer_id=layer.id()):
-
                         # Get the layer object for the relevant layer's ID
                         # Returns None if no layer with the given ID exists
                         layer = QgsProject.instance().mapLayer(layer_id)
 
                         if layer is None:
                             # Layer for given ID does not exist
-                            
+
                             # Layer was being watched but the layer was deleted
                             # and subsequently the layer's watched file changed
-                            
+
                             QgsMessageLog.logMessage(
-                                "Reloading layer\n" +
-                                "The layer for the watched file was deleted, removing its watcher\n" +
-                                f"Layer ID: {layer_id}\n" +
-                                f"Path:     {path}",
+                                "Reloading layer\n"
+                                + "The layer for the watched file was deleted, removing its watcher\n"
+                                + f"Layer ID: {layer_id}\n"
+                                + f"Path:     {path}",
                                 tag="Reloader",
                                 level=Qgis.Info,
                                 notifyUser=False,
                             )
-                            
+
                             # Get the watcher for this [removed] layer
                             watcher = self.watchers.pop(layer_id, None)
                             # Sanity check
@@ -413,7 +419,7 @@ class Reloader:
                                 # Delete the removed layer's watcher
                                 del watcher
                             # No further actions
-                            return;
+                            return
 
                         # Layer still exists
 
@@ -452,7 +458,7 @@ class Reloader:
 
     def unwatch(self):
         """Stop watching selected layer(s) for changes."""
-        layers = self.iface.layerTreeView().selectedLayers()
+        layers = self.get_selected_layers()
 
         if len(layers) == 0:
             mw = self.iface.mainWindow()
@@ -467,14 +473,16 @@ class Reloader:
                     # No watcher for layer
 
                     # Notify the user and log the error
-                    self.warn_and_log( f"Can't stop watching {layer.name()} because we never started watching it." )
+                    self.warn_and_log(
+                        f"Can't stop watching {layer.name()} because we never started watching it."
+                    )
 
                 else:
                     # Layer has a watcher
 
                     QgsMessageLog.logMessage(
-                        f"No longer watching {layer.name()}\n" +
-                        f"Path: {watcher.files()[0]}",
+                        f"No longer watching {layer.name()}\n"
+                        + f"Path: {watcher.files()[0]}",
                         tag="Reloader",
                         level=Qgis.Info,
                         notifyUser=False,
@@ -482,3 +490,14 @@ class Reloader:
 
                     # Remove the layer's watcher
                     del watcher
+
+    def get_selected_layers(self):
+        nodes = self.iface.layerTreeView().selectedNodes()
+        layers = []
+        for node in nodes:
+            if isinstance(node, QgsLayerTreeLayer):
+                layers.append(node.layer())
+            elif isinstance(node, QgsLayerTreeGroup):
+                for child in node.findLayers():
+                    layers.append(child.layer())
+        return layers

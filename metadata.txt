@@ -6,7 +6,7 @@
 name=Reloader
 qgisMinimumVersion=3.0
 description=Reload selected layer(s) on external changes or on demand.
-version=0.2
+version=0.2.1
 author=Maarten Pronk, Alexander Hajnal
 email=git@evetion.nl
 
@@ -44,4 +44,3 @@ Category of the plugin: Raster, Vector, Database or Web
 
 # If the plugin can run on QGIS Server.
 server=False
-
