@@ -20,7 +20,17 @@ repository=https://github.com/evetion/Reloader
 
 hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
-# changelog= first version
+changelog=
+      0.2.1
+        * Watching group layers is now supported
+      0.2.0
+        * Watching multiple files/layers is now working properly
+        * Support added for file names that are URL-encoded (including those with options appended)
+        * Files changed with non-in-place updates (write to temporary file + move) are now persistently watched
+        * Support added for all file path encoding used by QGIS on all platforms
+        * All valid selected layers will be watched even if selection includes unwatchable ones
+      0.1.0
+        * Initial release
 
 # Tags are comma separated with spaces allowed
 tags=python

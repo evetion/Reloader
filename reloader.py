@@ -319,7 +319,7 @@ class Reloader:
 
                 # Get the data file's path
                 # Not all layers will have this (e.g. ArcGIS REST layers don't; they have a "uri" component instead)
-                if not "path" in components:
+                if "path" not in components:
                     # Layer's data source does not appear to be a local file
 
                     # Notify the user and log the error
@@ -354,7 +354,7 @@ class Reloader:
                     # The file containing the layer's data exists
 
                     QgsMessageLog.logMessage(
-                        f"Creating callback",
+                        "Creating callback",
                         tag="Reloader",
                         level=Qgis.Info,
                         notifyUser=False,
