@@ -25,6 +25,7 @@ def run_all():
         print(f"Error running tests: {e}")
         success = False
 
+    print(f"Reloader tests ok: {success}")
     sys.exit(0 if success else 1)
 
 

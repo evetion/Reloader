@@ -12,7 +12,7 @@ clean = { cmd = "pbt clean; pbt clean-docs" }
 build = { cmd = "pbt compile; pbt validate; pbt zip" }
 deploy = { cmd = "pbt deploy" }
 install-plugin = { cmd = "python scripts/install_plugin.py" }
-tests = { cmd = "pixi run qgis --profiles-path .pixi/qgis_env --version-migration --nologo --code tests/__init__.py", depends-on = [
+tests = { cmd = "pixi run qgis --profiles-path .pixi/qgis_env --version-migration --nologo --code tests/__init__.py | tee /dev/stderr | grep -q 'Reloader tests ok: True'", depends-on = [
     "install-plugin",
 ] }
 qgis = { cmd = "qgis --profiles-path .pixi/qgis_env", depends-on = [
