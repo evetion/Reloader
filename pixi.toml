@@ -7,11 +7,18 @@ platforms = ["osx-arm64", "win-64", "linux-64"]
 version = "0.2.1"
 
 [tasks]
-tests = { cmd = "sh ./test.sh", cwd = ".docker" }
 format = { cmd = "ruff check --select I --fix ; ruff format ." }
 clean = { cmd = "pbt clean; pbt clean-docs" }
 build = { cmd = "pbt compile; pbt validate; pbt zip" }
 deploy = { cmd = "pbt deploy" }
+install-plugin = { cmd = "python scripts/install_plugin.py" }
+tests = { cmd = "pixi run qgis --profiles-path .pixi/qgis_env --version-migration --nologo --code tests/__init__.py | tee /dev/stderr | grep -q 'Reloader tests ok: True'", depends-on = [
+    "install-plugin",
+] }
+qgis = { cmd = "qgis --profiles-path .pixi/qgis_env", depends-on = [
+    "install-plugin",
+] }
+
 
 [dependencies]
 ruff = ">=0.9.6,<0.10"

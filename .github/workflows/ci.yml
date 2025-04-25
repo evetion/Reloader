@@ -16,7 +16,11 @@ jobs:
       - name: Generate resources.py
         run: pixi run pbt compile
       - name: Run tests
-        run: pixi run tests
+        env:
+          DISPLAY: :99
+        run: >
+          xvfb-run -s '+extension GLX -screen 0 1024x768x24'
+          pixi run tests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
