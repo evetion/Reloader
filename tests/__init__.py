@@ -9,12 +9,11 @@ from qgis.utils import iface
 
 
 def run_all():
-    test_loader = unittest.defaultTestLoader
-    test_suite = test_loader.discover(".", pattern="test_*.py")
-
-    cov = coverage.Coverage(config_file=".coveragerc")
-    cov.start()
     try:
+        cov = coverage.Coverage(config_file=".coveragerc")
+        test_loader = unittest.defaultTestLoader
+        test_suite = test_loader.discover(".", pattern="test_*.py")
+        cov.start()
         result = unittest.TextTestRunner(verbosity=3, stream=sys.stdout).run(test_suite)
         cov.stop()
         cov.save()
@@ -26,8 +25,6 @@ def run_all():
         print(f"Error running tests: {e}")
         success = False
 
-    app = QgsApplication.instance()
-    os.kill(app.applicationPid(), signal.SIGTERM)
     sys.exit(0 if success else 1)
 
 
