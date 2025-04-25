@@ -1,5 +1,5 @@
-from pathlib import Path
 import configparser
+from pathlib import Path
 
 
 def enable_plugin(plugin_name: str) -> None:

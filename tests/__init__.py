@@ -1,9 +1,6 @@
-import os
-import signal
 import sys
 
 import coverage
-from qgis.core import QgsApplication
 from qgis.testing import unittest
 from qgis.utils import iface
 
@@ -19,8 +16,6 @@ def run_all():
         cov.save()
         cov.xml_report(outfile="tests/coverage.xml")
         success = result.wasSuccessful()
-        print(result)
-        print(success)
     except Exception as e:
         print(f"Error running tests: {e}")
         success = False
