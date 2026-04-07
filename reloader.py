@@ -64,18 +64,19 @@ from qgis.core import (
     QgsLayerTreeGroup,
     QgsLayerTreeLayer,
     QgsMessageLog,
+    QgsVectorLayer,
     QgsProject,
     QgsProviderRegistry,
 )
 from qgis.PyQt.QtCore import (
+    QDir,
     QCoreApplication,
     QFileSystemWatcher,
 )
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
-# Initialize Qt resources from file resources.py
-from .resources import *
+QDir.addSearchPath("icons", os.path.dirname(__file__))
 
 
 class Reloader:
@@ -194,7 +195,7 @@ class Reloader:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ":/plugins/reloader/layer-reload.png"
+        icon_path = "icons:layer-reload.png"
         self.add_action(
             icon_path,
             text=self.tr("Reload selected layer(s)"),
@@ -202,7 +203,7 @@ class Reloader:
             parent=self.iface.mainWindow(),
         )
 
-        icon_path = ":/plugins/reloader/layer-reopen.png"
+        icon_path = "icons:layer-reopen.png"
         self.add_action(
             icon_path,
             text=self.tr("Reopen selected layer(s)"),
@@ -210,7 +211,7 @@ class Reloader:
             parent=self.iface.mainWindow(),
         )
 
-        icon_path = ":/plugins/reloader/layer-watch.png"
+        icon_path = "icons:layer-watch.png"
         self.add_action(
             icon_path,
             text=self.tr("Start watching layer(s) for changes"),
@@ -218,7 +219,7 @@ class Reloader:
             parent=self.iface.mainWindow(),
         )
 
-        icon_path = ":/plugins/reloader/layer-unwatch.png"
+        icon_path = "icons:layer-unwatch.png"
         self.add_action(
             icon_path,
             text=self.tr("Stop watching layer(s) for changes"),
@@ -271,6 +272,8 @@ class Reloader:
         else:
             for layer in layers:
                 layer.setDataSource(layer.source(), layer.name(), layer.providerType())
+                if isinstance(layer, QgsVectorLayer):
+                    layer.updateFields()
                 layer.triggerRepaint()
 
     def watch(self):
